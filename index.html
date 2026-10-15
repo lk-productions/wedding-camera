@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f1ea">
+  <title>Disposable Camera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="config.js"></script>
+  <script src="shared.js"></script>
+  <style>
+    :root {
+      --bg: #f6f1ea; --card: #fffdf9; --ink: #2b2622; --muted: #7b7068;
+      --accent: #a8784f; --accent-ink: #fff; --line: #e6ddd2; --danger: #b04a3c;
+      --serif: "Cormorant Garamond", Georgia, serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      max-width: 440px;
+      margin: 0 auto;
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+    }
+    section { display: flex; flex-direction: column; flex: 1; gap: 16px; }
+    section[hidden], [hidden] { display: none !important; }
+    p { margin: 0; }
+    .eyebrow {
+      margin: 8px 0 0; text-align: center; letter-spacing: .18em;
+      text-transform: uppercase; font-size: 12px; color: var(--muted);
+    }
+    h1, h2 { font-family: var(--serif); font-weight: 600; text-align: center; margin: 0; line-height: 1.1; }
+    h1 { font-size: 42px; }
+    h2 { font-size: 34px; }
+    .date { text-align: center; color: var(--muted); margin-top: -8px; font-style: italic; font-family: var(--serif); font-size: 20px; }
+    .lead { text-align: center; color: var(--muted); }
+    .spacer { flex: 1; }
+
+    /* Film strip showing shots left */
+    .film {
+      display: flex; justify-content: center; gap: 8px;
+      padding: 14px 16px; background: #2b2622; border-radius: 10px; position: relative;
+    }
+    .film::before, .film::after {
+      content: ""; position: absolute; left: 10px; right: 10px; height: 4px;
+      background: repeating-linear-gradient(90deg, #f6f1ea 0 6px, transparent 6px 14px); opacity: .5;
+    }
+    .film::before { top: 4px; }
+    .film::after { bottom: 4px; }
+    .frame { width: 42px; height: 30px; border-radius: 3px; background: #e9c79a; transition: background .3s, opacity .3s; }
+    .frame.used { background: #5a514b; opacity: .6; }
+
+    /* Polaroid reel of guests' photos */
+    .reel {
+      align-self: center;
+      width: min(58vw, 230px);
+      background: #fff;
+      padding: 10px 10px 0;
+      border-radius: 4px;
+      box-shadow: 0 12px 30px rgba(0,0,0,.16);
+      transform: rotate(-2deg);
+      margin: 6px 0 4px;
+    }
+    .reel-photo { position: relative; aspect-ratio: 4 / 5; background: #eee; overflow: hidden; }
+    .reel-photo img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; opacity: 0; transition: opacity .9s ease;
+    }
+    .reel-photo img.on { opacity: 1; }
+    .reel-cap {
+      height: 40px; display: flex; align-items: center; justify-content: center;
+      font-family: var(--serif); font-style: italic; font-size: 18px; color: #4a423c;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+    label.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+    input[type=text] {
+      font: inherit; font-size: 17px; color: var(--ink);
+      padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+    }
+    input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; font: inherit; font-weight: 600; font-size: 17px;
+      padding: 16px; border-radius: 999px; border: 0; cursor: pointer;
+      background: var(--accent); color: var(--accent-ink); text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+    .btn[disabled] { opacity: .5; pointer-events: none; }
+
+    .shutter-wrap { display: flex; flex-direction: column; align-items: center; margin: 12px 0; }
+    .shutter {
+      width: 168px; height: 168px; border-radius: 50%;
+      background: var(--card); color: var(--ink); border: 8px solid var(--ink);
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0,0,0,.15);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .shutter:active { transform: scale(.96); }
+    .shutter svg { width: 64px; height: 64px; }
+    .count { font-family: var(--serif); font-size: 64px; font-weight: 600; text-align: center; line-height: 1; }
+    .count-label { text-align: center; color: var(--muted); margin-top: 6px; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+    .preview {
+      width: 100%; max-height: 55vh; object-fit: contain; border-radius: 4px;
+      background: #fff; padding: 10px 10px 36px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.18); transform: rotate(-1.5deg);
+    }
+    .status { text-align: center; min-height: 24px; color: var(--muted); font-size: 15px; }
+    .status.error { color: var(--danger); }
+    .heart { text-align: center; font-size: 40px; color: var(--accent); line-height: 1; }
+    .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid currentColor; border-top-color: transparent; opacity: .8;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<main>
+  <!-- Welcome -->
+  <section id="screen-welcome" hidden>
+    <p class="eyebrow">The wedding of</p>
+    <h1 class="couple"></h1>
+    <p class="date"></p>
+    <div class="reel" hidden></div>
+    <div class="film no-reel" aria-hidden="true"></div>
+    <p class="lead">You've got <b class="total"></b> shots on this camera. Like a real disposable, you can't delete them, so make them count.</p>
+    <div class="card">
+      <label class="field">Your name (so we know who took what)
+        <input type="text" id="guest-name" autocomplete="name" maxlength="40" placeholder="Optional">
+      </label>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="start">Open the camera</button>
+  </section>
+
+  <!-- Camera -->
+  <section id="screen-camera" hidden>
+    <p class="eyebrow couple"></p>
+    <div class="film" aria-hidden="true"></div>
+    <div class="spacer"></div>
+    <div class="shutter-wrap">
+      <label class="shutter" for="file-input" aria-label="Take a photo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="4"/></svg>
+      </label>
+      <input type="file" id="file-input" class="visually-hidden" accept="image/*" capture="environment">
+    </div>
+    <div>
+      <p class="count" id="left-count"></p>
+      <p class="count-label" id="left-label"></p>
+    </div>
+    <div class="spacer"></div>
+    <p class="lead" style="font-size:14px">Tap the shutter to take a photo.</p>
+  </section>
+
+  <!-- Review -->
+  <section id="screen-review" hidden>
+    <p class="eyebrow">Nice shot</p>
+    <img class="preview" id="preview" alt="Your photo">
+    <p class="status" id="status" role="status"></p>
+    <div class="spacer"></div>
+    <button class="btn" id="keep">Add to the album</button>
+    <button class="btn secondary" id="retake">Retake</button>
+  </section>
+
+  <!-- Done -->
+  <section id="screen-done" hidden>
+    <div class="spacer"></div>
+    <div class="heart">♥</div>
+    <h2>That's a wrap!</h2>
+    <p class="lead">Your camera's out of film. Thank you for capturing our day.</p>
+    <div class="reel" hidden></div>
+    <p class="lead couple" style="font-family:var(--serif);font-size:22px;font-style:italic"></p>
+    <div class="spacer"></div>
+    <a class="btn secondary" href="slideshow.html">Watch the live slideshow</a>
+  </section>
+</main>
+
+<script>
+  const CONFIG = Camera.config;
+  const MAX_PIXELS = 2400;
+  const JPEG_QUALITY = 0.88;
+  const STORE_KEY = 'wedcam-v1';
+  const $ = (id) => document.getElementById(id);
+  const screens = ['welcome', 'camera', 'review', 'done'];
+
+  let state = load();
+  let pendingFile = null;
+  let pendingUrl = null;
+
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE_KEY));
+      if (s && typeof s.used === 'number') return s;
+    } catch (e) {}
+    return { used: 0, name: '', started: false };
+  }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function show(name) {
+    screens.forEach((s) => { $('screen-' + s).hidden = s !== name; });
+    window.scrollTo(0, 0);
+  }
+
+  function render() {
+    document.title = CONFIG.couple + ' · Disposable Camera';
+    document.querySelectorAll('.couple').forEach((el) => el.textContent = CONFIG.couple);
+    document.querySelectorAll('.date').forEach((el) => el.textContent = CONFIG.date);
+    document.querySelectorAll('.total').forEach((el) => el.textContent = CONFIG.shots);
+    document.querySelectorAll('.film').forEach((film) => {
+      film.innerHTML = '';
+      for (let i = 0; i < CONFIG.shots; i++) {
+        const f = document.createElement('div');
+        f.className = 'frame' + (i < state.used ? ' used' : '');
+        film.appendChild(f);
+      }
+    });
+    const left = CONFIG.shots - state.used;
+    $('left-count').textContent = left;
+    $('left-label').textContent = left === 1 ? 'shot left' : 'shots left';
+    $('retake').hidden = !CONFIG.allowRetake;
+  }
+
+  function route() {
+    render();
+    if (state.used >= CONFIG.shots) show('done');
+    else if (state.started) show('camera');
+    else show('welcome');
+  }
+
+  $('guest-name').value = state.name || '';
+  $('start').addEventListener('click', () => {
+    state.name = $('guest-name').value.trim();
+    state.started = true;
+    save();
+    route();
+  });
+
+  $('file-input').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    pendingFile = file;
+    if (pendingUrl) URL.revokeObjectURL(pendingUrl);
+    pendingUrl = URL.createObjectURL(file);
+    $('preview').src = pendingUrl;
+    setStatus('');
+    setBusy(false);
+    show('review');
+    if (!CONFIG.allowRetake) upload();
+  });
+
+  $('retake').addEventListener('click', () => {
+    pendingFile = null;
+    show('camera');
+    $('file-input').click();
+  });
+
+  $('keep').addEventListener('click', upload);
+
+  function setStatus(msg, isError) {
+    $('status').textContent = msg;
+    $('status').classList.toggle('error', !!isError);
+  }
+  function setBusy(busy) {
+    $('keep').disabled = busy;
+    $('retake').disabled = busy;
+    $('keep').innerHTML = busy ? '<span class="spinner"></span> Developing…' : 'Add to the album';
+  }
+
+  async function upload() {
+    if (!pendingFile) return;
+    setBusy(true);
+    setStatus('Sending your photo…');
+    try {
+      const dataUrl = await compress();
+      await Camera.uploadPhoto(dataUrl, state.name, state.used + 1);
+      state.used += 1;
+      save();
+      pendingFile = null;
+      setBusy(false);
+      route();
+      if (state.used >= CONFIG.shots) refreshPhotos();
+    } catch (err) {
+      console.error(err);
+      setBusy(false);
+      $('keep').textContent = 'Try again';
+      setStatus("Couldn't send. Check your signal and try again.", true);
+    }
+  }
+
+  function compress() {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, MAX_PIXELS / Math.max(img.naturalWidth, img.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+      };
+      img.onerror = () => reject(new Error('Could not read photo'));
+      img.src = pendingUrl;
+    });
+  }
+
+  // ---- Reel of photos other guests have taken ----
+  const reels = [...document.querySelectorAll('.reel')];
+  reels.forEach((r) => {
+    r.innerHTML = '<div class="reel-photo"><img alt=""><img alt=""></div><p class="reel-cap"></p>';
+  });
+  let reelPhotos = [];
+  let reelIdx = -1;
+
+  function showReelPhoto(reel, photo) {
+    const imgs = [...reel.querySelectorAll('img')];
+    const back = imgs.find((i) => !i.classList.contains('on')) || imgs[0];
+    const swap = () => {
+      imgs.forEach((i) => i.classList.toggle('on', i === back));
+      reel.querySelector('.reel-cap').textContent = photo.name ? 'by ' + photo.name : '';
+    };
+    const url = Camera.photoUrl(photo, 900);
+    back.onload = swap;
+    back.onerror = () => {
+      if (!photo.src && back.dataset.fallback !== photo.id) {
+        back.dataset.fallback = photo.id;
+        back.src = Camera.photoFallbackUrl(photo, 900);
+      }
+    };
+    if (back.src === url && back.complete && back.naturalWidth) swap();
+    else back.src = url;
+  }
+
+  function nextReel() {
+    if (!reelPhotos.length || document.hidden) return;
+    reelIdx = (reelIdx + 1) % reelPhotos.length;
+    reels.forEach((r) => showReelPhoto(r, reelPhotos[reelIdx]));
+  }
+
+  async function refreshPhotos() {
+    if (!CONFIG.showGuestPhotos || document.hidden) return;
+    try {
+      const photos = await Camera.listPhotos();
+      const hadNew = photos.length && (!reelPhotos.length || photos[0].id !== reelPhotos[0].id);
+      reelPhotos = photos;
+      const has = reelPhotos.length > 0;
+      reels.forEach((r) => r.hidden = !has);
+      document.querySelectorAll('.no-reel').forEach((el) => el.hidden = has);
+      if (hadNew) { reelIdx = -1; nextReel(); }
+    } catch (err) {
+      console.warn('Could not load photos', err);
+    }
+  }
+
+  route();
+  refreshPhotos();
+  setInterval(nextReel, 4000);
+  setInterval(refreshPhotos, 30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Live Slideshow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <script src="shared.js"></script>
+  <style>
+    :root { --accent: #a8784f; --serif: "Cormorant Garamond", Georgia, serif; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: #000; color: #fff;
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    body.idle { cursor: none; }
+
+    .slide { position: fixed; inset: 0; opacity: 0; transition: opacity 1.4s ease; }
+    .slide.on { opacity: 1; }
+    .slide .blur {
+      position: absolute; inset: -40px;
+      background-size: cover; background-position: center;
+      filter: blur(40px) brightness(.45); transform: scale(1.1);
+    }
+    .slide img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: contain;
+    }
+    .slide.on img { animation: drift 9s ease-out forwards; }
+    @keyframes drift { from { transform: scale(1); } to { transform: scale(1.04); } }
+
+    .shade {
+      position: fixed; left: 0; right: 0; bottom: 0; height: 30vh; pointer-events: none;
+      background: linear-gradient(transparent, rgba(0,0,0,.65));
+    }
+    .caption {
+      position: fixed; left: 4vw; bottom: 4vh;
+      font-family: var(--serif); font-style: italic;
+      font-size: clamp(22px, 3vw, 44px);
+      text-shadow: 0 2px 12px rgba(0,0,0,.5);
+      transition: opacity .6s;
+    }
+    .join {
+      position: fixed; right: 3vw; bottom: 3vh;
+      display: flex; align-items: center; gap: 18px;
+      background: rgba(255,255,255,.94); color: #222;
+      padding: 14px 20px 14px 14px; border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.35);
+    }
+    .join .qr { width: clamp(90px, 10vw, 150px); aspect-ratio: 1; }
+    .join .qr svg { width: 100%; height: 100%; display: block; }
+    .join-text { display: flex; flex-direction: column; gap: 4px; max-width: 220px; }
+    .join-title { font-family: var(--serif); font-weight: 600; font-size: clamp(20px, 2vw, 30px); line-height: 1.1; }
+    .join-sub { font-size: clamp(12px, 1vw, 15px); color: #666; }
+
+    .empty {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+      text-align: center; padding: 24px;
+      background: radial-gradient(circle at 50% 40%, #2a2420, #000 75%);
+    }
+    .empty h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(40px, 6vw, 84px); margin: 0; line-height: 1.05; }
+    .empty p { margin: 0; color: #c9c2b9; font-size: clamp(16px, 1.6vw, 22px); }
+    .empty .qr { width: clamp(180px, 22vw, 300px); background: #fff; padding: 16px; border-radius: 16px; }
+    .empty .qr svg { width: 100%; height: auto; display: block; }
+    .eyebrow { letter-spacing: .2em; text-transform: uppercase; font-size: 13px; color: var(--accent); }
+
+    .count {
+      position: fixed; top: 3vh; right: 3vw;
+      font-size: 14px; color: rgba(255,255,255,.7);
+      background: rgba(0,0,0,.35); padding: 6px 12px; border-radius: 999px;
+    }
+    .fs {
+      position: fixed; top: 3vh; left: 3vw;
+      font: inherit; font-size: 14px; color: #fff; cursor: pointer;
+      background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.3);
+      padding: 8px 14px; border-radius: 999px; transition: opacity .4s;
+    }
+    body.idle .fs { opacity: 0; pointer-events: none; }
+    [hidden] { display: none !important; }
+
+    @media (max-width: 700px) {
+      .join { left: 4vw; right: 4vw; bottom: 3vh; }
+      .caption { bottom: calc(3vh + 150px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="slide" id="slide-a"><div class="blur"></div><img alt=""></div>
+  <div class="slide" id="slide-b"><div class="blur"></div><img alt=""></div>
+  <div class="shade" id="shade" hidden></div>
+  <p class="caption" id="caption"></p>
+
+  <div class="empty" id="empty">
+    <p class="eyebrow">The wedding of</p>
+    <h1 class="couple"></h1>
+    <div class="qr" id="qr-big"></div>
+    <p>Scan to grab your disposable camera.<br>Photos will appear here as they're taken.</p>
+  </div>
+
+  <div class="join" id="join" hidden>
+    <div class="qr" id="qr-small"></div>
+    <div class="join-text">
+      <span class="join-title">Add your photos</span>
+      <span class="join-sub">Scan for your disposable camera</span>
+    </div>
+  </div>
+
+  <span class="count" id="count" hidden></span>
+  <button class="fs" id="fs">Full screen</button>
+
+<script>
+  const CONFIG = Camera.config;
+  const SLIDE_MS = 7000;
+  const REFRESH_MS = 20000;
+  const $ = (id) => document.getElementById(id);
+
+  document.title = CONFIG.couple + ' · Live Slideshow';
+  document.querySelectorAll('.couple').forEach((el) => el.textContent = CONFIG.couple);
+
+  // QR code pointing at the camera page (same folder as this page).
+  const cameraUrl = new URL('./', location.href).href;
+  function qrSvg() {
+    if (!window.qrcode) return '';
+    const qr = qrcode(0, 'M');
+    qr.addData(cameraUrl);
+    qr.make();
+    return qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true });
+  }
+  $('qr-big').innerHTML = $('qr-small').innerHTML = qrSvg();
+
+  // ---- Slideshow queue: brand-new photos jump the line, then everything loops ----
+  let all = [];
+  const known = new Set();
+  let upNext = [];
+  let loop = [];
+  let current = 'a';
+  let showing = false;
+
+  async function refresh() {
+    try {
+      const photos = await Camera.listPhotos();
+      const fresh = photos.filter((p) => !known.has(p.id));
+      fresh.forEach((p) => known.add(p.id));
+      all = photos;
+      if (known.size > fresh.length) upNext.push(...fresh.reverse()); // oldest new photo first
+      $('count').textContent = all.length + (all.length === 1 ? ' photo' : ' photos');
+      $('count').hidden = !all.length;
+      if (!showing && all.length) { showing = true; advance(); }
+    } catch (err) {
+      console.warn('Could not load photos', err);
+    }
+  }
+
+  function pick() {
+    if (upNext.length) return upNext.shift();
+    if (!loop.length) loop = shuffle(all.slice());
+    return loop.shift();
+  }
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function advance() {
+    const photo = pick();
+    if (!photo) return setTimeout(advance, SLIDE_MS);
+    const nextId = current === 'a' ? 'b' : 'a';
+    const slide = $('slide-' + nextId);
+    const img = slide.querySelector('img');
+    const url = Camera.photoUrl(photo, 1920);
+    let triedFallback = false;
+
+    img.onload = () => {
+      slide.querySelector('.blur').style.backgroundImage = 'url("' + img.src + '")';
+      $('slide-' + current).classList.remove('on');
+      slide.classList.remove('on');
+      void slide.offsetWidth; // restart the drift animation
+      slide.classList.add('on');
+      current = nextId;
+      $('caption').textContent = photo.name ? '📷 ' + photo.name : '';
+      $('empty').hidden = true;
+      $('join').hidden = false;
+      $('shade').hidden = false;
+      setTimeout(advance, SLIDE_MS);
+    };
+    img.onerror = () => {
+      if (!triedFallback && !photo.src) {
+        triedFallback = true;
+        img.src = Camera.photoFallbackUrl(photo, 1920);
+      } else {
+        setTimeout(advance, 500); // skip photos that won't load
+      }
+    };
+    img.src = url;
+  }
+
+  // Full screen + hide cursor when idle
+  $('fs').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen?.();
+  });
+  let idleTimer;
+  function wake() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => document.body.classList.add('idle'), 3000);
+  }
+  document.addEventListener('mousemove', wake);
+  wake();
+
+  // Keep the screen awake on devices that support it.
+  async function keepAwake() {
+    try { await navigator.wakeLock?.request('screen'); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
+  keepAwake();
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
