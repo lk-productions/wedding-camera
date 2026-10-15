@@ -42,6 +42,7 @@
       content: ""; position: absolute; inset: .18in;
       border: 1px solid var(--accent); opacity: .5; pointer-events: none;
     }
+    .logo { display: block; margin: 0 auto 10px; max-width: 2.4in; max-height: .7in; object-fit: contain; }
     .eyebrow { letter-spacing: .22em; text-transform: uppercase; font-size: 10pt; color: var(--accent); margin: 0; }
     h1 { font-family: var(--serif); font-weight: 600; font-size: 34pt; line-height: 1.02; margin: 8px 0 0; }
     .sub { font-size: 11pt; color: var(--muted); margin: 10px 0 0; line-height: 1.45; }
@@ -67,6 +68,7 @@
 
   <div class="card" id="card" hidden>
     <div>
+      <img class="logo" data-logo alt="" hidden>
       <p class="eyebrow" data-copy="cardEyebrow"></p>
       <h1 data-copy="cardTitle"></h1>
       <p class="sub" data-copy="cardSub"></p>
@@ -88,7 +90,7 @@
   (async () => {
     try {
       const { event } = await Camera.loadEvent();
-      Camera.applyTheme(event.theme);
+      Camera.applyBranding(event);
       document.title = event.title + ' · QR Card';
       Camera.applyCopy(event);
       document.getElementById('shots-step').textContent = event.shots + ' photos, no deleting';

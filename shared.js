@@ -73,15 +73,23 @@
     return c;
   }
 
-  function applyTheme(name) {
+  // White or near-black text, whichever reads better on the given colour.
+  function textOn(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    return lum > 0.62 ? '#1a1612' : '#ffffff';
+  }
+
+  function applyTheme(name, accent) {
     const t = THEMES[name] || THEMES.ivory;
+    const custom = /^#[0-9a-f]{6}$/i.test(accent || '') ? accent : null;
     const root = document.documentElement.style;
     root.setProperty('--bg', t.background);
     root.setProperty('--card', t.card);
     root.setProperty('--ink', t.text);
     root.setProperty('--muted', t.muted);
-    root.setProperty('--accent', t.accent);
-    root.setProperty('--accent-ink', t.accentText || '#fff');
+    root.setProperty('--accent', custom || t.accent);
+    root.setProperty('--accent-ink', custom ? textOn(custom) : (t.accentText || '#fff'));
     root.setProperty('--line', t.line);
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', t.background);
   }
@@ -163,6 +171,29 @@
     return 'https://lh3.googleusercontent.com/d/' + encodeURIComponent(photo.id) + '=w' + width;
   }
 
+  // A branding image (logo or background) uploaded from the Mac app.
+  function assetUrl(id, width) {
+    return id ? 'https://lh3.googleusercontent.com/d/' + encodeURIComponent(id) + '=w' + width : '';
+  }
+
+  // Theme + logo + background in one go. Pages mark logo spots with <img data-logo hidden>.
+  function applyBranding(ev, opts) {
+    applyTheme(ev.theme, ev.accent);
+    document.querySelectorAll('img[data-logo]').forEach((img) => {
+      if (!ev.logo) { img.hidden = true; return; }
+      img.onload = () => { img.hidden = false; };
+      img.onerror = () => {
+        if (!img.dataset.fb) { img.dataset.fb = 1; img.src = 'https://drive.google.com/thumbnail?id=' + ev.logo + '&sz=w800'; }
+      };
+      img.src = assetUrl(ev.logo, 800);
+    });
+    const bg = opts && opts.background === 'slide' ? ev.slideBg : (opts && opts.background === 'phone' ? ev.phoneBg : '');
+    if (bg) {
+      document.documentElement.style.setProperty('--bg-image', 'url("' + assetUrl(bg, opts.background === 'slide' ? 1920 : 1200) + '")');
+      document.body.classList.add('has-bg');
+    }
+  }
+
   // Link to another page of this site for the same event, e.g. pageUrl('slideshow.html').
   function pageUrl(page) {
     const u = new URL(page || './', location.href);
@@ -196,7 +227,7 @@
 
   window.Camera = {
     eventId: demo && !eventId ? 'demo' : eventId, demo,
-    loadEvent, applyTheme, applyCopy, copyFor, listPhotos, uploadPhoto, photoUrl, photoFallbackUrl, pageUrl,
+    loadEvent, applyTheme, applyBranding, assetUrl, applyCopy, copyFor, listPhotos, uploadPhoto, photoUrl, photoFallbackUrl, pageUrl,
     adminPhotos, moderate,
   };
 })();

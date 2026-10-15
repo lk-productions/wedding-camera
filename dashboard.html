@@ -174,7 +174,7 @@
       photos = data.photos.map((p) => (pending[p.id] ? { ...p, s: pending[p.id] } : p));
       if (first) {
         saveKey(key);
-        Camera.applyTheme(event.theme);
+        Camera.applyTheme(event.theme, event.accent);
         Camera.applyCopy(event);
         document.title = event.title + ' · Dashboard';
         $('open-slideshow').href = Camera.pageUrl('slideshow.html');

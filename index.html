@@ -133,12 +133,26 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     html.loading main { visibility: hidden; }
+
+    /* Branding */
+    .logo { display: block; margin: 4px auto 0; max-width: 72%; max-height: 84px; object-fit: contain; }
+    .logo.small { max-height: 44px; margin-top: 0; }
+    body.has-bg::before {
+      content: ""; position: fixed; inset: 0; z-index: -2;
+      background: var(--bg-image) center / cover no-repeat;
+    }
+    body.has-bg::after {
+      content: ""; position: fixed; inset: 0; z-index: -1;
+      background: linear-gradient(color-mix(in srgb, var(--bg) 70%, transparent), color-mix(in srgb, var(--bg) 92%, transparent) 45%);
+    }
+    body.has-bg { background-color: var(--bg); }
   </style>
 </head>
 <body>
 <main>
   <!-- Welcome -->
   <section id="screen-welcome" hidden>
+    <img class="logo" data-logo alt="" hidden>
     <p class="eyebrow" data-copy="headline"></p>
     <h1 data-title></h1>
     <p class="date" data-date></p>
@@ -156,6 +170,7 @@
 
   <!-- Camera -->
   <section id="screen-camera" hidden>
+    <img class="logo small" data-logo alt="" hidden>
     <p class="eyebrow" data-title></p>
     <div class="film" aria-hidden="true"></div>
     <div class="spacer"></div>
@@ -186,6 +201,7 @@
   <!-- Done -->
   <section id="screen-done" hidden>
     <div class="spacer"></div>
+    <img class="logo" data-logo alt="" hidden>
     <div class="heart" data-copy="doneIcon"></div>
     <h2 data-copy="doneTitle"></h2>
     <p class="lead" data-copy="doneText"></p>
@@ -398,7 +414,7 @@
     try {
       const { event, photos } = await Camera.loadEvent();
       CONFIG = event;
-      Camera.applyTheme(CONFIG.theme);
+      Camera.applyBranding(CONFIG, { background: 'phone' });
       $('slideshow-link').href = Camera.pageUrl('slideshow.html');
       route();
       refreshPhotos(photos);

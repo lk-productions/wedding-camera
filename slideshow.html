@@ -33,6 +33,16 @@
       object-fit: contain;
     }
     .slide.on img { animation: drift 9s ease-out forwards; }
+    /* A branded background replaces the blurred copy of each photo. */
+    body.has-bg .slide .blur { background-image: var(--bg-image) !important; filter: none; transform: none; inset: 0; }
+    body.has-bg .empty { background: linear-gradient(rgba(0,0,0,.5), rgba(0,0,0,.6)), var(--bg-image) center / cover; }
+    .brand-logo {
+      position: fixed; top: 3vh; left: 3vw; z-index: 3;
+      max-height: clamp(48px, 8vh, 110px); max-width: 22vw; object-fit: contain;
+      background: rgba(255,255,255,.92); padding: 10px 16px; border-radius: 14px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.3);
+    }
+    .empty .logo { max-height: 14vh; max-width: 40vw; object-fit: contain; }
     @keyframes drift { from { transform: scale(1); } to { transform: scale(1.04); } }
 
     .shade {
@@ -76,8 +86,9 @@
       font-size: 14px; color: rgba(255,255,255,.7);
       background: rgba(0,0,0,.35); padding: 6px 12px; border-radius: 999px;
     }
+    body:not(.playing) .brand-logo { display: none; }
     .fs {
-      position: fixed; top: 3vh; left: 3vw;
+      position: fixed; top: 3vh; left: 50%; transform: translateX(-50%); z-index: 4;
       font: inherit; font-size: 14px; color: #fff; cursor: pointer;
       background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.3);
       padding: 8px 14px; border-radius: 999px; transition: opacity .4s;
@@ -97,7 +108,9 @@
   <div class="shade" id="shade" hidden></div>
   <p class="caption" id="caption"></p>
 
+  <img class="brand-logo" id="brand-logo" data-logo alt="" hidden>
   <div class="empty" id="empty">
+    <img class="logo" data-logo alt="" hidden>
     <p class="eyebrow" data-copy="headline"></p>
     <h1 data-title></h1>
     <div class="qr" id="qr-big"></div>
@@ -185,6 +198,7 @@
       current = nextId;
       $('caption').textContent = photo.name ? '📷 ' + photo.name : '';
       $('empty').hidden = true;
+      document.body.classList.add('playing');
       $('join').hidden = false;
       $('shade').hidden = false;
       setTimeout(advance, SLIDE_MS);
@@ -226,7 +240,7 @@
       const { event, photos } = await Camera.loadEvent();
       document.title = event.title + ' · Live Slideshow';
       Camera.applyCopy(event);
-      document.documentElement.style.setProperty('--accent', (THEMES[event.theme] || THEMES.ivory).accent);
+      Camera.applyBranding(event, { background: 'slide' });
       refresh(photos);
       setInterval(() => refresh(), REFRESH_MS);
     } catch (err) {
