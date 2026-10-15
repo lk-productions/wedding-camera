@@ -21,7 +21,7 @@ window.CONFIG = {
   theme: 'ivory',
 
   // The Apps Script "Web app URL" (ends in /exec). Leave blank to run in demo mode.
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbxNrV2oS3MapurZOl2BYaWIqCOoJn4Rxy0gCKTCFILl7ziFSoJWhNh0JUFHSER7e-yS/exec',
 };
 
 window.THEMES = {
