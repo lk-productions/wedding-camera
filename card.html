@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f1ea">
+  <title>QR Table Card</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <script src="shared.js"></script>
+  <style>
+    :root {
+      --bg: #f6f1ea; --card: #fffdf9; --ink: #2b2622; --muted: #7b7068; --accent: #a8784f; --line: #e6ddd2;
+      --serif: "Cormorant Garamond", Georgia, serif;
+    }
+    @page { size: 5in 7in; margin: 0; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: #e9e5df; color: var(--ink);
+      font-family: Inter, system-ui, sans-serif;
+      display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px 16px;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .toolbar button {
+      font: inherit; font-weight: 600; padding: 10px 20px; border-radius: 999px; border: 0;
+      background: #2b2622; color: #fff; cursor: pointer;
+    }
+    .toolbar span { color: #6b625b; font-size: 14px; }
+
+    .card {
+      width: 5in; height: 7in; max-width: 100%;
+      background: var(--bg);
+      box-shadow: 0 10px 40px rgba(0,0,0,.15);
+      padding: .45in .4in;
+      display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+      text-align: center; position: relative;
+    }
+    .card::before {
+      content: ""; position: absolute; inset: .18in;
+      border: 1px solid var(--accent); opacity: .5; pointer-events: none;
+    }
+    .eyebrow { letter-spacing: .22em; text-transform: uppercase; font-size: 10pt; color: var(--accent); margin: 0; }
+    h1 { font-family: var(--serif); font-weight: 600; font-size: 34pt; line-height: 1.02; margin: 8px 0 0; }
+    .sub { font-size: 11pt; color: var(--muted); margin: 10px 0 0; line-height: 1.45; }
+    .qr { width: 2.3in; height: 2.3in; background: #fff; padding: .14in; border-radius: 10px; }
+    .qr svg { width: 100%; height: 100%; display: block; }
+    .steps { display: flex; gap: 14px; font-size: 9pt; color: var(--muted); }
+    .steps b { display: block; color: var(--ink); font-size: 10pt; }
+    .names { font-family: var(--serif); font-style: italic; font-size: 20pt; margin: 0; }
+    .date { font-size: 9pt; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 2px 0 0; }
+
+    @media print {
+      body { background: none; padding: 0; display: block; }
+      .toolbar { display: none; }
+      .card { box-shadow: none; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Print</button>
+    <span>Prints as a 5×7 card. Choose "Fit to page" for letter paper.</span>
+  </div>
+
+  <div class="card" id="card" hidden>
+    <div>
+      <p class="eyebrow" data-copy="cardEyebrow"></p>
+      <h1 data-copy="cardTitle"></h1>
+      <p class="sub" data-copy="cardSub"></p>
+    </div>
+    <div class="qr" id="qr"></div>
+    <div class="steps">
+      <div><b>1. Scan</b>with your phone camera</div>
+      <div><b>2. Shoot</b><span id="shots-step"></span></div>
+      <div><b>3. Watch</b>them on the slideshow</div>
+    </div>
+    <div>
+      <p class="names" data-title></p>
+      <p class="date" data-date></p>
+    </div>
+  </div>
+  <p id="error" hidden></p>
+
+<script>
+  (async () => {
+    try {
+      const { event } = await Camera.loadEvent();
+      Camera.applyTheme(event.theme);
+      document.title = event.title + ' · QR Card';
+      Camera.applyCopy(event);
+      document.getElementById('shots-step').textContent = event.shots + ' photos, no deleting';
+
+      const qr = qrcode(0, 'M');
+      qr.addData(Camera.pageUrl('./'));
+      qr.make();
+      document.getElementById('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true });
+      document.getElementById('card').hidden = false;
+    } catch (err) {
+      const el = document.getElementById('error');
+      el.textContent = err.code === 'network' ? "Can't connect. Refresh to try again." : 'Event not found. Check the ?e= part of the link.';
+      el.hidden = false;
+    }
+  })();
+</script>
+</body>
+</html>

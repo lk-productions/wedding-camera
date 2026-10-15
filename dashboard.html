@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f1ea">
+  <meta name="robots" content="noindex">
+  <title>Photo Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="config.js"></script>
+  <script src="shared.js"></script>
+  <style>
+    :root {
+      --bg: #f6f1ea; --card: #fffdf9; --ink: #2b2622; --muted: #7b7068;
+      --accent: #a8784f; --accent-ink: #fff; --line: #e6ddd2;
+      --ok: #2f7d4f; --ok-bg: #e3f2e8; --no: #b04a3c; --no-bg: #f8e4e0; --new: #9a6b12; --new-bg: #fbf0d9;
+      --serif: "Cormorant Garamond", Georgia, serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: Inter, system-ui, -apple-system, sans-serif; font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+    [hidden] { display: none !important; }
+    header {
+      position: sticky; top: 0; z-index: 5;
+      background: color-mix(in srgb, var(--bg) 92%, transparent);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+      padding: max(12px, env(safe-area-inset-top)) 16px 0;
+    }
+    .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; max-width: 1200px; margin: 0 auto; }
+    h1 { font-family: var(--serif); font-size: 28px; margin: 0; line-height: 1.1; flex: 1; min-width: 180px; }
+    .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; font-family: Inter, sans-serif; font-weight: 400; }
+    .links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer;
+      padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line);
+      background: var(--card); color: var(--ink); white-space: nowrap;
+    }
+    .pill.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    .pill[disabled] { opacity: .5; pointer-events: none; }
+    .tabs { display: flex; gap: 4px; max-width: 1200px; margin: 12px auto 0; overflow-x: auto; }
+    .tab {
+      font: inherit; font-weight: 500; cursor: pointer; background: none; border: 0;
+      padding: 10px 12px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap;
+    }
+    .tab.on { color: var(--ink); border-bottom-color: var(--accent); }
+    .tab b { font-weight: 600; margin-left: 4px; }
+    main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .banner {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 12px 14px; margin-bottom: 16px; font-size: 14px; color: var(--muted);
+    }
+    .banner span { flex: 1; min-width: 200px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+    .tile {
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .thumb { position: relative; aspect-ratio: 1; background: #ddd; cursor: zoom-in; }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .badge {
+      position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 600;
+      padding: 3px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .badge.new { background: var(--new-bg); color: var(--new); }
+    .badge.approved { background: var(--ok-bg); color: var(--ok); }
+    .badge.hidden { background: var(--no-bg); color: var(--no); }
+    .tile.hidden .thumb img { opacity: .35; filter: grayscale(1); }
+    .meta { padding: 8px 10px 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta b { color: var(--ink); font-weight: 500; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 10px 10px; }
+    .act {
+      font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+      padding: 8px 4px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink);
+    }
+    .act.ok.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+    .act.no.on { background: var(--no); border-color: var(--no); color: #fff; }
+    .empty { text-align: center; color: var(--muted); padding: 60px 16px; }
+
+    .lightbox {
+      position: fixed; inset: 0; z-index: 20; background: rgba(10,8,6,.92);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px;
+    }
+    .lightbox img { max-width: 100%; max-height: calc(100vh - 140px); object-fit: contain; border-radius: 4px; }
+    .lb-bar { display: flex; gap: 8px; align-items: center; color: #ddd; font-size: 14px; flex-wrap: wrap; justify-content: center; }
+    .lb-bar .act { color: #fff; border-color: rgba(255,255,255,.3); padding: 10px 18px; }
+    .lb-close { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 16px; font-size: 28px; color: #fff; background: none; border: 0; cursor: pointer; }
+    .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); font-size: 40px; color: #fff; background: none; border: 0; cursor: pointer; padding: 16px; opacity: .7; }
+    .lb-prev { left: 0; } .lb-next { right: 0; }
+
+    .login { max-width: 360px; margin: 15vh auto 0; display: flex; flex-direction: column; gap: 12px; text-align: center; padding: 0 16px; }
+    .login input { font: inherit; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+    .login .err { color: var(--no); min-height: 20px; font-size: 14px; }
+    .toast {
+      position: fixed; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+      background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-size: 14px; z-index: 30;
+    }
+  </style>
+</head>
+<body>
+  <div class="login" id="login" hidden>
+    <h1>Photo dashboard</h1>
+    <p class="sub">Enter the admin key from the Events sheet.</p>
+    <input id="key-input" placeholder="Admin key" autocomplete="off">
+    <button class="pill primary" id="key-go">Open dashboard</button>
+    <p class="err" id="login-err"></p>
+  </div>
+
+  <div id="app" hidden>
+    <header>
+      <div class="top">
+        <h1><span data-title></span><p class="sub" id="summary"></p></h1>
+        <div class="links">
+          <a class="pill" id="open-slideshow" target="_blank" rel="noopener">Open slideshow</a>
+          <a class="pill" id="open-camera" target="_blank" rel="noopener">Camera</a>
+        </div>
+      </div>
+      <nav class="tabs" id="tabs"></nav>
+    </header>
+    <main>
+      <div class="banner" id="banner"></div>
+      <div class="grid" id="grid"></div>
+      <p class="empty" id="empty" hidden></p>
+    </main>
+  </div>
+
+  <div class="lightbox" id="lightbox" hidden>
+    <button class="lb-close" id="lb-close" aria-label="Close">×</button>
+    <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous">‹</button>
+    <button class="lb-nav lb-next" id="lb-next" aria-label="Next">›</button>
+    <img id="lb-img" alt="">
+    <div class="lb-bar">
+      <span id="lb-meta"></span>
+      <button class="act ok" id="lb-ok">✓ Show</button>
+      <button class="act no" id="lb-no">✕ Hide</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const KEY_STORE = 'wedcam-admin:' + Camera.eventId;
+  let key = params.get('key') || readKey();
+  let event = null;
+  let photos = [];
+  let tab = 'new';
+  let lbIndex = -1;
+  const pending = {}; // id → status we've sent but the server may not reflect yet
+
+  function readKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+  function saveKey(k) { try { localStorage.setItem(KEY_STORE, k); } catch (e) {} }
+
+  // Which photos the slideshow shows, given the event's approval setting.
+  const onShow = (p) => (event.approveFirst ? p.s === 'approved' : p.s !== 'hidden');
+
+  const TABS = [
+    ['new', 'Needs review', (p) => p.s === 'new'],
+    ['show', 'On slideshow', (p) => onShow(p)],
+    ['hidden', 'Hidden', (p) => p.s === 'hidden'],
+    ['all', 'All', () => true],
+  ];
+
+  async function load(first) {
+    try {
+      const data = await Camera.adminPhotos(key);
+      event = data.event;
+      photos = data.photos.map((p) => (pending[p.id] ? { ...p, s: pending[p.id] } : p));
+      if (first) {
+        saveKey(key);
+        Camera.applyTheme(event.theme);
+        Camera.applyCopy(event);
+        document.title = event.title + ' · Dashboard';
+        $('open-slideshow').href = Camera.pageUrl('slideshow.html');
+        $('open-camera').href = Camera.pageUrl('./');
+        $('login').hidden = true;
+        $('app').hidden = false;
+      }
+      render();
+    } catch (err) {
+      if (first) {
+        $('app').hidden = true;
+        $('login').hidden = false;
+        $('login-err').textContent = err.code === 'bad-key' ? (key ? "That key didn't work for this event." : '') : "Can't connect. Try again.";
+      }
+    }
+  }
+
+  function render() {
+    const n = (fn) => photos.filter(fn).length;
+    $('summary').textContent = photos.length + ' photos · ' + n(onShow) + ' on the slideshow';
+    $('tabs').innerHTML = '';
+    TABS.forEach(([id, label, fn]) => {
+      const b = document.createElement('button');
+      b.className = 'tab' + (tab === id ? ' on' : '');
+      b.innerHTML = label + '<b>' + n(fn) + '</b>';
+      b.onclick = () => { tab = id; render(); };
+      $('tabs').appendChild(b);
+    });
+
+    const newCount = n((p) => p.s === 'new');
+    $('banner').innerHTML = '';
+    const msg = document.createElement('span');
+    msg.textContent = event.approveFirst
+      ? 'Approval is on: new photos stay off the slideshow until you approve them.'
+      : 'New photos go on the slideshow right away. Hide any you don’t want shown.';
+    $('banner').appendChild(msg);
+    if (newCount) {
+      const all = document.createElement('button');
+      all.className = 'pill primary';
+      all.textContent = event.approveFirst ? 'Approve all ' + newCount + ' new' : 'Mark all ' + newCount + ' as reviewed';
+      all.onclick = () => setStatus(photos.filter((p) => p.s === 'new').map((p) => p.id), 'approved');
+      $('banner').appendChild(all);
+    }
+
+    const list = visible();
+    $('grid').innerHTML = '';
+    list.forEach((p, i) => $('grid').appendChild(tile(p, i)));
+    $('empty').hidden = list.length > 0;
+    $('empty').textContent = tab === 'new' ? 'All caught up. New photos will show up here.' : 'No photos here yet.';
+    if (lbIndex >= 0) showLightbox(lbIndex);
+  }
+
+  function visible() {
+    const fn = TABS.find((t) => t[0] === tab)[2];
+    return photos.filter(fn);
+  }
+
+  function tile(p, i) {
+    const el = document.createElement('div');
+    el.className = 'tile ' + p.s;
+    const time = new Date(p.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    el.innerHTML =
+      '<div class="thumb"><img loading="lazy" alt=""><span class="badge ' + p.s + '">' + label(p.s) + '</span></div>' +
+      '<div class="meta"><b></b> · ' + time + '</div>' +
+      '<div class="actions"><button class="act ok">✓ Show</button><button class="act no">✕ Hide</button></div>';
+    const img = el.querySelector('img');
+    img.src = Camera.photoUrl(p, 400);
+    img.onerror = () => { if (!img.dataset.fb && !p.src) { img.dataset.fb = 1; img.src = Camera.photoFallbackUrl(p, 400); } };
+    el.querySelector('.meta b').textContent = p.name || 'Guest';
+    el.querySelector('.thumb').onclick = () => showLightbox(i);
+    const ok = el.querySelector('.ok'), no = el.querySelector('.no');
+    ok.classList.toggle('on', p.s === 'approved');
+    no.classList.toggle('on', p.s === 'hidden');
+    ok.onclick = () => setStatus([p.id], p.s === 'approved' ? 'new' : 'approved');
+    no.onclick = () => setStatus([p.id], p.s === 'hidden' ? 'new' : 'hidden');
+    return el;
+  }
+
+  function label(s) { return s === 'approved' ? 'Approved' : s === 'hidden' ? 'Hidden' : 'New'; }
+
+  async function setStatus(ids, status) {
+    const before = {};
+    ids.forEach((id) => {
+      const p = photos.find((x) => x.id === id);
+      if (p) { before[id] = p.s; p.s = status; pending[id] = status; }
+    });
+    render();
+    try {
+      await Camera.moderate(key, ids, status);
+      setTimeout(() => ids.forEach((id) => { if (pending[id] === status) delete pending[id]; }), 30000);
+    } catch (err) {
+      ids.forEach((id) => {
+        const p = photos.find((x) => x.id === id);
+        if (p) p.s = before[id];
+        delete pending[id];
+      });
+      render();
+      toast("Couldn't save. Check your connection.");
+    }
+  }
+
+  // ---- Lightbox ----
+  function showLightbox(i) {
+    const list = visible();
+    if (!list.length) return closeLightbox();
+    lbIndex = Math.max(0, Math.min(i, list.length - 1));
+    const p = list[lbIndex];
+    const img = $('lb-img');
+    img.dataset.fb = '';
+    img.onerror = () => { if (!img.dataset.fb && !p.src) { img.dataset.fb = 1; img.src = Camera.photoFallbackUrl(p, 1600); } };
+    img.src = Camera.photoUrl(p, 1600);
+    $('lb-meta').textContent = (p.name || 'Guest') + ' · ' + label(p.s) + ' · ' + (lbIndex + 1) + '/' + list.length;
+    $('lb-ok').classList.toggle('on', p.s === 'approved');
+    $('lb-no').classList.toggle('on', p.s === 'hidden');
+    $('lb-ok').onclick = () => setStatus([p.id], p.s === 'approved' ? 'new' : 'approved');
+    $('lb-no').onclick = () => setStatus([p.id], p.s === 'hidden' ? 'new' : 'hidden');
+    $('lightbox').hidden = false;
+  }
+  function closeLightbox() { lbIndex = -1; $('lightbox').hidden = true; }
+  $('lb-close').onclick = closeLightbox;
+  $('lb-prev').onclick = () => showLightbox(lbIndex - 1);
+  $('lb-next').onclick = () => showLightbox(lbIndex + 1);
+  document.addEventListener('keydown', (e) => {
+    if ($('lightbox').hidden) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') showLightbox(lbIndex - 1);
+    if (e.key === 'ArrowRight') showLightbox(lbIndex + 1);
+    if (e.key === 'a') $('lb-ok').click();
+    if (e.key === 'h') $('lb-no').click();
+  });
+
+  function toast(msg) {
+    $('toast').textContent = msg;
+    $('toast').hidden = false;
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => { $('toast').hidden = true; }, 3000);
+  }
+
+  $('key-go').onclick = () => { key = $('key-input').value.trim(); load(true); };
+  $('key-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('key-go').click(); });
+
+  if (!Camera.eventId) {
+    $('login').hidden = false;
+    $('login-err').textContent = 'This link is missing the event (?e=…). Use the Dashboard link from the Events sheet.';
+    $('key-input').hidden = $('key-go').hidden = true;
+  } else {
+    load(true);
+    setInterval(() => { if (event && !document.hidden) load(false); }, 15000);
+  }
+</script>
+</body>
+</html>

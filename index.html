@@ -132,20 +132,21 @@
       animation: spin .8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    html.loading main { visibility: hidden; }
   </style>
 </head>
 <body>
 <main>
   <!-- Welcome -->
   <section id="screen-welcome" hidden>
-    <p class="eyebrow">The wedding of</p>
-    <h1 class="couple"></h1>
-    <p class="date"></p>
+    <p class="eyebrow" data-copy="headline"></p>
+    <h1 data-title></h1>
+    <p class="date" data-date></p>
     <div class="reel" hidden></div>
     <div class="film no-reel" aria-hidden="true"></div>
-    <p class="lead">You've got <b class="total"></b> shots on this camera. Like a real disposable, you can't delete them, so make them count.</p>
+    <p class="lead" data-copy="intro"></p>
     <div class="card">
-      <label class="field">Your name (so we know who took what)
+      <label class="field"><span data-copy="nameLabel"></span>
         <input type="text" id="guest-name" autocomplete="name" maxlength="40" placeholder="Optional">
       </label>
     </div>
@@ -155,7 +156,7 @@
 
   <!-- Camera -->
   <section id="screen-camera" hidden>
-    <p class="eyebrow couple"></p>
+    <p class="eyebrow" data-title></p>
     <div class="film" aria-hidden="true"></div>
     <div class="spacer"></div>
     <div class="shutter-wrap">
@@ -185,23 +186,34 @@
   <!-- Done -->
   <section id="screen-done" hidden>
     <div class="spacer"></div>
-    <div class="heart">♥</div>
-    <h2>That's a wrap!</h2>
-    <p class="lead">Your camera's out of film. Thank you for capturing our day.</p>
+    <div class="heart" data-copy="doneIcon"></div>
+    <h2 data-copy="doneTitle"></h2>
+    <p class="lead" data-copy="doneText"></p>
     <div class="reel" hidden></div>
-    <p class="lead couple" style="font-family:var(--serif);font-size:22px;font-style:italic"></p>
+    <p class="lead" data-title style="font-family:var(--serif);font-size:22px;font-style:italic"></p>
     <div class="spacer"></div>
-    <a class="btn secondary" href="slideshow.html">Watch the live slideshow</a>
+    <a class="btn secondary" id="slideshow-link" href="slideshow.html">Watch the live slideshow</a>
+  </section>
+
+  <!-- Missing / closed / offline -->
+  <section id="screen-message" hidden>
+    <div class="spacer"></div>
+    <div class="heart">♥</div>
+    <h2 id="message-title"></h2>
+    <p class="lead" id="message-text"></p>
+    <div class="spacer"></div>
+    <button class="btn secondary" id="message-retry" hidden onclick="location.reload()">Try again</button>
   </section>
 </main>
 
 <script>
-  const CONFIG = Camera.config;
+  document.documentElement.classList.add('loading');
+  let CONFIG = null;
   const MAX_PIXELS = 2400;
   const JPEG_QUALITY = 0.88;
-  const STORE_KEY = 'wedcam-v1';
+  const STORE_KEY = 'wedcam-v1:' + Camera.eventId;
   const $ = (id) => document.getElementById(id);
-  const screens = ['welcome', 'camera', 'review', 'done'];
+  const screens = ['welcome', 'camera', 'review', 'done', 'message'];
 
   let state = load();
   let pendingFile = null;
@@ -224,10 +236,8 @@
   }
 
   function render() {
-    document.title = CONFIG.couple + ' · Disposable Camera';
-    document.querySelectorAll('.couple').forEach((el) => el.textContent = CONFIG.couple);
-    document.querySelectorAll('.date').forEach((el) => el.textContent = CONFIG.date);
-    document.querySelectorAll('.total').forEach((el) => el.textContent = CONFIG.shots);
+    document.title = CONFIG.title + ' · Camera';
+    Camera.applyCopy(CONFIG);
     document.querySelectorAll('.film').forEach((film) => {
       film.innerHTML = '';
       for (let i = 0; i < CONFIG.shots; i++) {
@@ -242,9 +252,19 @@
     $('retake').hidden = !CONFIG.allowRetake;
   }
 
+  function showMessage(title, text, retry) {
+    $('message-title').textContent = title;
+    $('message-text').textContent = text;
+    $('message-retry').hidden = !retry;
+    show('message');
+  }
+
   function route() {
     render();
-    if (state.used >= CONFIG.shots) show('done');
+    if (!CONFIG.open && state.used < CONFIG.shots) {
+      showMessage('This camera is closed', Camera.copyFor(CONFIG).closed);
+    }
+    else if (state.used >= CONFIG.shots) show('done');
     else if (state.started) show('camera');
     else show('welcome');
   }
@@ -359,10 +379,10 @@
     reels.forEach((r) => showReelPhoto(r, reelPhotos[reelIdx]));
   }
 
-  async function refreshPhotos() {
-    if (!CONFIG.showGuestPhotos || document.hidden) return;
+  async function refreshPhotos(initial) {
+    if (!CONFIG || !CONFIG.showGuestPhotos || document.hidden) return;
     try {
-      const photos = await Camera.listPhotos();
+      const photos = initial || await Camera.listPhotos();
       const hadNew = photos.length && (!reelPhotos.length || photos[0].id !== reelPhotos[0].id);
       reelPhotos = photos;
       const has = reelPhotos.length > 0;
@@ -374,10 +394,26 @@
     }
   }
 
-  route();
-  refreshPhotos();
-  setInterval(nextReel, 4000);
-  setInterval(refreshPhotos, 30000);
+  async function init() {
+    try {
+      const { event, photos } = await Camera.loadEvent();
+      CONFIG = event;
+      Camera.applyTheme(CONFIG.theme);
+      $('slideshow-link').href = Camera.pageUrl('slideshow.html');
+      route();
+      refreshPhotos(photos);
+      setInterval(nextReel, 4000);
+      setInterval(() => refreshPhotos(), 30000);
+    } catch (err) {
+      if (err.code === 'missing' || err.code === 'not-found') {
+        showMessage('Camera not found', 'Scan the QR code at your event to open its camera.');
+      } else {
+        showMessage("Can't connect", 'Check your signal and try again.', true);
+      }
+    }
+    document.documentElement.classList.remove('loading');
+  }
+  init();
 </script>
 </body>
 </html>

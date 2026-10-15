@@ -98,17 +98,17 @@
   <p class="caption" id="caption"></p>
 
   <div class="empty" id="empty">
-    <p class="eyebrow">The wedding of</p>
-    <h1 class="couple"></h1>
+    <p class="eyebrow" data-copy="headline"></p>
+    <h1 data-title></h1>
     <div class="qr" id="qr-big"></div>
-    <p>Scan to grab your disposable camera.<br>Photos will appear here as they're taken.</p>
+    <p data-copy="emptyText"></p>
   </div>
 
   <div class="join" id="join" hidden>
     <div class="qr" id="qr-small"></div>
     <div class="join-text">
-      <span class="join-title">Add your photos</span>
-      <span class="join-sub">Scan for your disposable camera</span>
+      <span class="join-title" data-copy="joinTitle"></span>
+      <span class="join-sub" data-copy="joinSub"></span>
     </div>
   </div>
 
@@ -116,16 +116,12 @@
   <button class="fs" id="fs">Full screen</button>
 
 <script>
-  const CONFIG = Camera.config;
   const SLIDE_MS = 7000;
   const REFRESH_MS = 20000;
   const $ = (id) => document.getElementById(id);
 
-  document.title = CONFIG.couple + ' · Live Slideshow';
-  document.querySelectorAll('.couple').forEach((el) => el.textContent = CONFIG.couple);
-
-  // QR code pointing at the camera page (same folder as this page).
-  const cameraUrl = new URL('./', location.href).href;
+  // QR code pointing at this event's camera page.
+  const cameraUrl = Camera.pageUrl('./');
   function qrSvg() {
     if (!window.qrcode) return '';
     const qr = qrcode(0, 'M');
@@ -143,9 +139,9 @@
   let current = 'a';
   let showing = false;
 
-  async function refresh() {
+  async function refresh(initial) {
     try {
-      const photos = await Camera.listPhotos();
+      const photos = initial || await Camera.listPhotos();
       const fresh = photos.filter((p) => !known.has(p.id));
       fresh.forEach((p) => known.add(p.id));
       all = photos;
@@ -225,8 +221,26 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
   keepAwake();
 
-  refresh();
-  setInterval(refresh, REFRESH_MS);
+  async function init() {
+    try {
+      const { event, photos } = await Camera.loadEvent();
+      document.title = event.title + ' · Live Slideshow';
+      Camera.applyCopy(event);
+      document.documentElement.style.setProperty('--accent', (THEMES[event.theme] || THEMES.ivory).accent);
+      refresh(photos);
+      setInterval(() => refresh(), REFRESH_MS);
+    } catch (err) {
+      const missing = err.code === 'missing' || err.code === 'not-found';
+      document.querySelector('.empty .eyebrow').hidden = true;
+      document.querySelector('.empty .qr').hidden = true;
+      document.querySelector('.empty h1').textContent = missing ? 'Slideshow not found' : "Can't connect";
+      document.querySelector('.empty p:last-child').textContent = missing
+        ? 'Check the link. It should end in ?e= and the event ID.'
+        : 'Retrying in 30 seconds…';
+      if (!missing) setTimeout(() => location.reload(), 30000);
+    }
+  }
+  init();
 </script>
 </body>
 </html>
