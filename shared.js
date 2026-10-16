@@ -5,6 +5,8 @@
   const apiUrl = (window.SITE && SITE.apiUrl) || '';
   // ?e=demo always shows sample photos — handy for showing the camera to a new client.
   const demo = !apiUrl || eventId === 'demo';
+  // ?sample=1 shows sample photos with a real event's branding, to preview the look.
+  const useSamples = demo || params.get('sample') === '1';
 
   const demoMode = params.get('mode') === 'event' ? 'event' : 'wedding';
   const DEMO_EVENT = {
@@ -135,7 +137,7 @@
       throw codeError('network');
     }
     if (!data.ok) throw codeError(data.error === 'not-found' ? 'not-found' : 'network');
-    return { event: data.event, photos: data.photos || [] };
+    return { event: data.event, photos: useSamples ? await demoPhotos() : (data.photos || []) };
   }
 
   function codeError(code) {
@@ -169,7 +171,7 @@
   const demoStatus = {};
 
   async function listPhotos() {
-    if (demo) return demoPhotos();
+    if (useSamples) return demoPhotos();
     const res = await fetch(apiUrl + '?action=list&e=' + encodeURIComponent(eventId), { cache: 'no-store' });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'List failed');
@@ -231,28 +233,26 @@
     return u.href;
   }
 
-  // ---- Demo mode: fake photos so the pages can be previewed ----
+  // ---- Sample photos for demo mode and ?sample=1 ----
+  // Free-to-use photos from Lorem Picsum (picsum.photos). A new one "arrives" every 20 seconds
+  // after the first ten, so you can watch new photos jump the queue.
+  const SAMPLES = [
+    [1011, 'Aunt May'], [129, 'Chris & Dana'], [65, 'Priya', true], [342, ''], [453, 'Ben'],
+    [1027, 'Grace', true], [1062, 'Grandpa Joe'], [91, 'Hugo', true], [399, 'Elena'], [431, ''],
+    [64, 'Sam & Leo', true], [1040, 'Maria'], [237, 'Dev'], [203, 'Jordan'], [338, 'Taylor', true],
+    [1036, 'Ava'], [429, ''], [1012, 'Frank'],
+  ];
+  const sampleStart = Date.now();
   const demoUploads = [];
-  let demoCache = null;
   function demoPhotos() {
-    if (!demoCache) {
-      const names = ['Aunt May', 'Chris', '', 'Priya', 'Sam & Leo', 'Grandpa Joe'];
-      const hues = [24, 200, 340, 140, 45, 280];
-      demoCache = names.map((name, i) => {
-        const c = document.createElement('canvas');
-        c.width = i % 2 ? 900 : 1200; c.height = i % 2 ? 1200 : 900;
-        const x = c.getContext('2d');
-        const g = x.createLinearGradient(0, 0, c.width, c.height);
-        g.addColorStop(0, `hsl(${hues[i]} 45% 70%)`);
-        g.addColorStop(1, `hsl(${hues[i] + 40} 40% 40%)`);
-        x.fillStyle = g; x.fillRect(0, 0, c.width, c.height);
-        x.fillStyle = 'rgba(255,255,255,.85)';
-        x.font = '600 90px Georgia'; x.textAlign = 'center';
-        x.fillText('Demo photo ' + (i + 1), c.width / 2, c.height / 2);
-        return { id: 'demo' + i, name, t: Date.now() - i * 60000, src: c.toDataURL('image/jpeg', 0.8) };
-      });
-    }
-    return Promise.resolve(demoUploads.concat(demoCache));
+    const count = Math.min(SAMPLES.length, 10 + Math.floor((Date.now() - sampleStart) / 20000));
+    const photos = SAMPLES.slice(0, count).map(([id, name, tall], i) => ({
+      id: 'sample-' + id,
+      name,
+      t: sampleStart - (SAMPLES.length - i) * 60000,
+      src: 'https://picsum.photos/id/' + id + (tall ? '/1067/1600' : '/1600/1067'),
+    })).reverse(); // newest first, like the real list
+    return Promise.resolve(demoUploads.concat(photos));
   }
 
   window.Camera = {
