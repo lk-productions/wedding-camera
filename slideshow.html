@@ -200,7 +200,7 @@
   <button class="fs" id="fs">Full screen</button>
 
 <script>
-  // ?style=classic|kenburns|grid|polaroid  &secs=7 (seconds per photo)
+  // ?style=classic|kenburns|grid|polaroid  &secs=7 (seconds per photo)  &grid=4x3 (columns x rows)
   const params = new URLSearchParams(location.search);
   const STYLES = ['classic', 'kenburns', 'grid', 'polaroid'];
   const STYLE = STYLES.includes(params.get('style')) ? params.get('style') : 'classic';
@@ -307,7 +307,10 @@
   let tiles = [];
   let gridDims = '';
 
+  // A fixed size from &grid=4x3, or one that grows with the number of photos.
+  const GRID = (params.get('grid') || '').match(/^([2-8])x([2-6])$/);
   function dimsFor(count) {
+    if (GRID) return [Number(GRID[1]), Number(GRID[2])];
     if (count < 12) return [3, 2];
     if (count < 30) return [4, 3];
     return [5, 4];
