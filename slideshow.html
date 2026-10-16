@@ -95,6 +95,60 @@
     }
     body.idle .fs { opacity: 0; pointer-events: none; }
     [hidden] { display: none !important; }
+
+    /* ---- Ken Burns: a slow zoom and drift instead of the gentle default ---- */
+    body.style-kenburns .slide.on img {
+      animation: kb var(--kb-dur, 9s) linear forwards;
+      transform-origin: var(--kb-ox, 50%) var(--kb-oy, 50%);
+    }
+    @keyframes kb { from { transform: scale(var(--kb-from, 1)); } to { transform: scale(var(--kb-to, 1.16)); } }
+
+    /* ---- Shared stage for the grid and polaroid styles ---- */
+    .stage-bg { position: fixed; inset: 0; background: radial-gradient(circle at 50% 45%, #2b2622, #0a0a0a 75%); }
+    body.has-bg .stage-bg { background: linear-gradient(rgba(0,0,0,.25), rgba(0,0,0,.25)), var(--bg-image) center / cover; }
+
+    /* ---- Photo grid: tiles flip over one at a time ---- */
+    .wall {
+      position: fixed; inset: 0; display: grid; gap: 10px; padding: 10px;
+      opacity: 0; transition: opacity 1.2s ease;
+    }
+    .wall.on { opacity: 1; }
+    .tile { perspective: 1400px; min-width: 0; min-height: 0; }
+    .tile-inner { position: relative; width: 100%; height: 100%; transition: transform .9s cubic-bezier(.45,.05,.35,1); transform-style: preserve-3d; }
+    .tile.flipped .tile-inner { transform: rotateY(180deg); }
+    .face {
+      position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+      background: #111 center / cover no-repeat; border-radius: 4px; overflow: hidden;
+    }
+    .face.back { transform: rotateY(180deg); }
+    .face::after { content: ""; position: absolute; inset: 50% 0 0; background: linear-gradient(transparent, rgba(0,0,0,.55)); }
+    .face .name {
+      position: absolute; left: 14px; bottom: 10px; z-index: 1; color: #fff;
+      font-family: var(--serif); font-style: italic; font-size: clamp(14px, 1.6vw, 30px);
+      text-shadow: 0 2px 8px rgba(0,0,0,.5); white-space: nowrap;
+    }
+
+    /* ---- Polaroid pile ---- */
+    .pile { position: fixed; inset: 0; overflow: hidden; }
+    .polaroid {
+      --w: clamp(200px, 23vw, 440px);
+      position: absolute; width: var(--w);
+      /* Sized from the card itself; a % padding would follow the screen width instead. */
+      background: #fafafa; padding: calc(var(--w) * .045) calc(var(--w) * .045) 0; box-shadow: 0 14px 40px rgba(0,0,0,.45);
+      transform: translate(-50%, -50%) rotate(var(--r)); animation: drop .85s cubic-bezier(.2,.8,.3,1) both;
+      transition: opacity .6s ease;
+    }
+    .polaroid .ph { aspect-ratio: 1; background: #ddd center / cover no-repeat; }
+    .polaroid .name {
+      height: 4.6em; display: flex; align-items: center; justify-content: center;
+      font-family: var(--serif); font-style: italic; font-size: clamp(14px, 1.5vw, 28px); color: #333;
+      white-space: nowrap; overflow: hidden;
+    }
+    .polaroid.leaving { opacity: 0; }
+    @keyframes drop {
+      from { opacity: 0; transform: translate(-50%, -50%) scale(1.35) rotate(calc(var(--r) + 10deg)); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(var(--r)); }
+    }
     html[data-font="script"] .caption, html[data-font="script"] .join-title { font-style: normal; font-weight: 400; }
 
     @media (max-width: 700px) {
@@ -106,6 +160,9 @@
 <body>
   <div class="slide" id="slide-a"><div class="blur"></div><img alt=""></div>
   <div class="slide" id="slide-b"><div class="blur"></div><img alt=""></div>
+  <div class="stage-bg" id="stage-bg" hidden></div>
+  <div class="wall" id="wall" hidden></div>
+  <div class="pile" id="pile" hidden></div>
   <div class="shade" id="shade" hidden></div>
   <p class="caption" id="caption"></p>
 
@@ -130,9 +187,15 @@
   <button class="fs" id="fs">Full screen</button>
 
 <script>
-  const SLIDE_MS = 7000;
+  // ?style=classic|kenburns|grid|polaroid  &secs=7 (seconds per photo)
+  const params = new URLSearchParams(location.search);
+  const STYLES = ['classic', 'kenburns', 'grid', 'polaroid'];
+  const STYLE = STYLES.includes(params.get('style')) ? params.get('style') : 'classic';
+  const SLIDE_MS = Math.max(3, Math.min(30, Number(params.get('secs')) || 7)) * 1000;
   const REFRESH_MS = 20000;
+  const MAX_POLAROIDS = 12;
   const $ = (id) => document.getElementById(id);
+  document.body.classList.add('style-' + STYLE);
 
   // QR code pointing at this event's camera page.
   const cameraUrl = Camera.pageUrl('./');
@@ -162,16 +225,172 @@
       if (known.size > fresh.length) upNext.push(...fresh.reverse()); // oldest new photo first
       $('count').textContent = all.length + (all.length === 1 ? ' photo' : ' photos');
       $('count').hidden = !all.length;
-      if (!showing && all.length) { showing = true; advance(); }
+      if (!showing && all.length) { showing = true; step(); }
     } catch (err) {
       console.warn('Could not load photos', err);
     }
   }
 
-  function pick() {
+  function pick(avoid) {
     if (upNext.length) return upNext.shift();
     if (!loop.length) loop = shuffle(all.slice());
+    if (avoid) {
+      const i = loop.findIndex((p) => !avoid.has(p.id));
+      if (i >= 0) return loop.splice(i, 1)[0];
+    }
     return loop.shift();
+  }
+
+  // Resolves to a URL that actually loads (Drive thumbnail, then Google's image CDN), or null.
+  function loadPhoto(photo, width) {
+    return new Promise((resolve) => {
+      const urls = [Camera.photoUrl(photo, width)];
+      if (!photo.src) urls.push(Camera.photoFallbackUrl(photo, width));
+      const tryNext = () => {
+        const url = urls.shift();
+        if (!url) return resolve(null);
+        const img = new Image();
+        img.onload = () => resolve(url);
+        img.onerror = tryNext;
+        img.src = url;
+      };
+      tryNext();
+    });
+  }
+
+  // The grid needs a few photos to look like a wall; until then it plays the classic way.
+  function activeStyle() {
+    if (STYLE === 'grid' && all.length < 4) return 'classic';
+    return STYLE;
+  }
+
+  function step() {
+    const mode = activeStyle();
+    showStage(mode);
+    if (mode === 'grid') return stepGrid().finally(() => setTimeout(step, Math.max(1200, SLIDE_MS / 3)));
+    if (mode === 'polaroid') return dropPolaroid().finally(() => setTimeout(step, Math.max(1800, SLIDE_MS * 0.55)));
+    advance();
+  }
+
+  function showStage(mode) {
+    const staged = mode === 'grid' || mode === 'polaroid';
+    $('stage-bg').hidden = !staged;
+    $('wall').hidden = mode !== 'grid';
+    $('pile').hidden = mode !== 'polaroid';
+    document.querySelectorAll('.slide').forEach((el) => { el.hidden = staged; });
+    $('caption').hidden = staged;
+    $('shade').hidden = staged || !document.body.classList.contains('playing');
+    if (staged) {
+      $('empty').hidden = true;
+      document.body.classList.add('playing');
+      $('join').hidden = false;
+    }
+  }
+
+  // ---- Photo grid ----
+  let tiles = [];
+  let gridDims = '';
+
+  function dimsFor(count) {
+    if (count < 12) return [3, 2];
+    if (count < 30) return [4, 3];
+    return [5, 4];
+  }
+
+  function face(el, url, name) {
+    el.style.backgroundImage = url ? 'url("' + url + '")' : '';
+    el.querySelector('.name').textContent = name || '';
+  }
+
+  async function stepGrid() {
+    const [cols, rows] = dimsFor(all.length);
+    if (!tiles.length || gridDims !== cols + 'x' + rows) return buildWall(cols, rows);
+    // Flip the tile that has gone longest without changing (with a little randomness).
+    const oldest = tiles.slice().sort((a, b) => a.last - b.last).slice(0, 3);
+    const tile = oldest[Math.floor(Math.random() * oldest.length)];
+    const photo = pick(new Set(tiles.map((t) => t.id)));
+    if (!photo) return;
+    const url = await loadPhoto(photo, 900);
+    if (!url) return;
+    const hidden = tile.el.classList.contains('flipped') ? tile.front : tile.back;
+    face(hidden, url, photo.name);
+    tile.el.classList.toggle('flipped');
+    tile.id = photo.id;
+    tile.last = Date.now();
+  }
+
+  async function buildWall(cols, rows) {
+    const wall = $('wall');
+    const count = cols * rows;
+    const chosen = new Set();
+    const photos = [];
+    for (let i = 0; i < count; i++) {
+      const p = pick(chosen);
+      if (p) { photos.push(p); chosen.add(p.id); }
+    }
+    if (!photos.length) return;
+    const urls = await Promise.all(photos.map((p) => loadPhoto(p, 900)));
+    wall.classList.remove('on');
+    wall.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+    wall.style.gridTemplateRows = 'repeat(' + rows + ', 1fr)';
+    wall.innerHTML = '';
+    tiles = [];
+    for (let i = 0; i < count; i++) {
+      const p = photos[i % photos.length];
+      const el = document.createElement('div');
+      el.className = 'tile';
+      el.innerHTML = '<div class="tile-inner"><div class="face front"><span class="name"></span></div>' +
+                     '<div class="face back"><span class="name"></span></div></div>';
+      const t = { el, front: el.querySelector('.front'), back: el.querySelector('.back'), id: p.id,
+                  last: Date.now() - Math.random() * 5000 };
+      face(t.front, urls[i % photos.length], p.name);
+      wall.appendChild(el);
+      tiles.push(t);
+    }
+    gridDims = cols + 'x' + rows;
+    void wall.offsetWidth; // commit the hidden state so the fade-in runs
+    wall.classList.add('on');
+  }
+
+  // ---- Polaroid pile ----
+  let lastSpot = null;
+
+  function spot() {
+    const hasLogo = !$('brand-logo').hidden;
+    let best = { x: 50, y: 48 }, bestScore = -1;
+    for (let i = 0; i < 14; i++) {
+      const p = { x: 16 + Math.random() * 68, y: 27 + Math.random() * 47 }; // percent of the screen
+      if (p.x > 68 && p.y > 65) continue;               // QR corner
+      if (hasLogo && p.x < 29 && p.y < 31) continue;     // logo
+      const score = lastSpot ? Math.hypot(p.x - lastSpot.x, p.y - lastSpot.y) : 0;
+      if (score > bestScore) { best = p; bestScore = score; }
+    }
+    lastSpot = best;
+    return best;
+  }
+
+  async function dropPolaroid() {
+    const photo = pick();
+    if (!photo) return;
+    const url = await loadPhoto(photo, 900);
+    if (!url) return;
+    const pile = $('pile');
+    const at = spot();
+    const card = document.createElement('div');
+    card.className = 'polaroid';
+    card.style.left = at.x + '%';
+    card.style.top = at.y + '%';
+    card.style.setProperty('--r', (Math.random() * 24 - 12).toFixed(1) + 'deg');
+    card.innerHTML = '<div class="ph"></div><div class="name"></div>';
+    card.querySelector('.ph').style.backgroundImage = 'url("' + url + '")';
+    card.querySelector('.name').textContent = photo.name || '';
+    pile.appendChild(card);
+    const staying = pile.querySelectorAll('.polaroid:not(.leaving)');
+    if (staying.length > MAX_POLAROIDS) {
+      const old = staying[0];
+      old.classList.add('leaving');
+      setTimeout(() => old.remove(), 700);
+    }
   }
   function shuffle(a) {
     for (let i = a.length - 1; i > 0; i--) {
@@ -183,7 +402,7 @@
 
   function advance() {
     const photo = pick();
-    if (!photo) return setTimeout(advance, SLIDE_MS);
+    if (!photo) return setTimeout(step, SLIDE_MS);
     const nextId = current === 'a' ? 'b' : 'a';
     const slide = $('slide-' + nextId);
     const img = slide.querySelector('img');
@@ -194,6 +413,15 @@
       slide.querySelector('.blur').style.backgroundImage = 'url("' + img.src + '")';
       $('slide-' + current).classList.remove('on');
       slide.classList.remove('on');
+      if (STYLE === 'kenburns') {
+        // A different zoom and drift for every photo.
+        const zoomIn = Math.random() < 0.5;
+        slide.style.setProperty('--kb-from', zoomIn ? 1 : 1.16);
+        slide.style.setProperty('--kb-to', zoomIn ? 1.16 : 1);
+        slide.style.setProperty('--kb-ox', Math.round(Math.random() * 100) + '%');
+        slide.style.setProperty('--kb-oy', Math.round(Math.random() * 100) + '%');
+        slide.style.setProperty('--kb-dur', (SLIDE_MS / 1000 + 2) + 's');
+      }
       void slide.offsetWidth; // restart the drift animation
       slide.classList.add('on');
       current = nextId;
@@ -202,14 +430,14 @@
       document.body.classList.add('playing');
       $('join').hidden = false;
       $('shade').hidden = false;
-      setTimeout(advance, SLIDE_MS);
+      setTimeout(step, SLIDE_MS);
     };
     img.onerror = () => {
       if (!triedFallback && !photo.src) {
         triedFallback = true;
         img.src = Camera.photoFallbackUrl(photo, 1920);
       } else {
-        setTimeout(advance, 500); // skip photos that won't load
+        setTimeout(step, 500); // skip photos that won't load
       }
     };
     img.src = url;
