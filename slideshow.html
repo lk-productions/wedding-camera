@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-  <script src="config.js?v=20261016a"></script>
-  <script src="shared.js?v=20261016a"></script>
+  <script src="config.js?v=20261016b"></script>
+  <script src="shared.js?v=20261016b"></script>
   <style>
     :root { --accent: #a8784f; --serif: "Cormorant Garamond", Georgia, serif; }
     * { box-sizing: border-box; }
@@ -128,10 +128,23 @@
       text-shadow: 0 2px 8px rgba(0,0,0,.5); white-space: nowrap;
     }
 
+    /* The grid's bottom-right square: logo, QR code and "share your photos". */
+    .brand-tile {
+      background: #fbfbfb; border-radius: 4px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 3%; padding: 4%; text-align: center; min-width: 0; min-height: 0;
+    }
+    .brand-tile img { max-width: 70%; max-height: 17%; object-fit: contain; }
+    .brand-tile .qr { height: 46%; aspect-ratio: 1; }
+    .brand-tile .qr svg { width: 100%; height: 100%; display: block; }
+    .brand-tile b { font-family: var(--serif); font-weight: 600; font-size: clamp(14px, 2.2vw, 40px); color: var(--accent); line-height: 1.1; }
+    .brand-tile small { font-size: clamp(10px, 1.05vw, 19px); color: #777; }
+    /* With the brand square in the wall, the floating logo and QR card aren't needed. */
+    body.walled .join, body.walled .brand-logo { display: none !important; }
+
     /* ---- Polaroid pile ---- */
     .pile { position: fixed; inset: 0; overflow: hidden; }
     .polaroid {
-      --w: clamp(200px, 23vw, 440px);
+      --w: clamp(160px, 18.5vw, 360px);
       position: absolute; width: var(--w);
       /* Sized from the card itself; a % padding would follow the screen width instead. */
       background: #fafafa; padding: calc(var(--w) * .045) calc(var(--w) * .045) 0; box-shadow: 0 14px 40px rgba(0,0,0,.45);
@@ -193,9 +206,9 @@
   const STYLE = STYLES.includes(params.get('style')) ? params.get('style') : 'classic';
   const SLIDE_MS = Math.max(3, Math.min(30, Number(params.get('secs')) || 7)) * 1000;
   const REFRESH_MS = 20000;
-  const MAX_POLAROIDS = 12;
   const $ = (id) => document.getElementById(id);
   document.body.classList.add('style-' + STYLE);
+  let EVENT = null;
 
   // QR code pointing at this event's camera page.
   const cameraUrl = Camera.pageUrl('./');
@@ -268,7 +281,9 @@
     const mode = activeStyle();
     showStage(mode);
     if (mode === 'grid') return stepGrid().finally(() => setTimeout(step, Math.max(1200, SLIDE_MS / 3)));
-    if (mode === 'polaroid') return dropPolaroid().finally(() => setTimeout(step, Math.max(1800, SLIDE_MS * 0.55)));
+    // Fill the screen quickly at first, then settle into the chosen pace.
+    const filling = slotUsed.length === 0 || slotUsed.some((t) => !t);
+    if (mode === 'polaroid') return dropPolaroid().finally(() => setTimeout(step, filling ? 900 : Math.max(1800, SLIDE_MS * 0.55)));
     advance();
   }
 
@@ -277,6 +292,7 @@
     $('stage-bg').hidden = !staged;
     $('wall').hidden = mode !== 'grid';
     $('pile').hidden = mode !== 'polaroid';
+    document.body.classList.toggle('walled', mode === 'grid');
     document.querySelectorAll('.slide').forEach((el) => { el.hidden = staged; });
     $('caption').hidden = staged;
     $('shade').hidden = staged || !document.body.classList.contains('playing');
@@ -324,7 +340,7 @@
     const count = cols * rows;
     const chosen = new Set();
     const photos = [];
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count - 1; i++) {
       const p = pick(chosen);
       if (p) { photos.push(p); chosen.add(p.id); }
     }
@@ -335,7 +351,9 @@
     wall.style.gridTemplateRows = 'repeat(' + rows + ', 1fr)';
     wall.innerHTML = '';
     tiles = [];
-    for (let i = 0; i < count; i++) {
+    // The bottom-right cell is the brand square: logo, QR code and the invitation.
+    const photoCells = count - 1;
+    for (let i = 0; i < photoCells; i++) {
       const p = photos[i % photos.length];
       const el = document.createElement('div');
       el.className = 'tile';
@@ -347,27 +365,37 @@
       wall.appendChild(el);
       tiles.push(t);
     }
+    const brand = document.createElement('div');
+    brand.className = 'brand-tile';
+    const words = EVENT ? Camera.copyFor(EVENT) : {};
+    brand.innerHTML = (EVENT && EVENT.logo ? '<img alt="">' : '') + '<div class="qr"></div><b></b><small></small>';
+    if (EVENT && EVENT.logo) brand.querySelector('img').src = Camera.assetUrl(EVENT.logo, 600);
+    brand.querySelector('.qr').innerHTML = qrSvg();
+    brand.querySelector('b').textContent = words.joinTitle || '';
+    brand.querySelector('small').textContent = words.joinSub || '';
+    wall.appendChild(brand);
     gridDims = cols + 'x' + rows;
     void wall.offsetWidth; // commit the hidden state so the fade-in runs
     wall.classList.add('on');
   }
 
   // ---- Polaroid pile ----
-  let lastSpot = null;
-
-  function spot() {
-    const hasLogo = !$('brand-logo').hidden;
-    let best = { x: 50, y: 48 }, bestScore = -1;
-    for (let i = 0; i < 14; i++) {
-      const p = { x: 16 + Math.random() * 68, y: 27 + Math.random() * 47 }; // percent of the screen
-      if (p.x > 68 && p.y > 65) continue;               // QR corner
-      if (hasLogo && p.x < 29 && p.y < 31) continue;     // logo
-      const score = lastSpot ? Math.hypot(p.x - lastSpot.x, p.y - lastSpot.y) : 0;
-      if (score > bestScore) { best = p; bestScore = score; }
+  // Spots across the whole screen, five by three (in % of the screen), leaving the logo and QR
+  // corners clear. Each new polaroid takes an empty spot, or the one that's waited longest.
+  function slots() {
+    const hasLogo = !!(EVENT && EVENT.logo);
+    const out = [];
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 5; col++) {
+        if (row === 2 && col === 4) continue;           // QR corner
+        if (row === 0 && col === 0 && hasLogo) continue; // logo
+        out.push({ x: 12.5 + col * 18.75, y: 25.5 + row * 24.5 });
+      }
     }
-    lastSpot = best;
-    return best;
+    return out;
   }
+  let slotUsed = [];
+  const slotCard = {};
 
   async function dropPolaroid() {
     const photo = pick();
@@ -375,8 +403,17 @@
     const url = await loadPhoto(photo, 900);
     if (!url) return;
     const pile = $('pile');
-    const at = spot();
+    const spots = slots();
+    if (slotUsed.length !== spots.length) slotUsed = spots.map(() => 0);
+    const empty = slotUsed.map((t, i) => (t ? -1 : i)).filter((i) => i >= 0);
+    const oldest = slotUsed.map((t, i) => i).sort((a, b) => slotUsed[a] - slotUsed[b]).slice(0, 3);
+    const slot = empty.length ? empty[Math.floor(Math.random() * empty.length)] : oldest[Math.floor(Math.random() * oldest.length)];
+    const old = slotCard[slot];
+    if (old) { old.classList.add('leaving'); setTimeout(() => old.remove(), 700); }
+    slotUsed[slot] = Date.now();
+    const at = { x: spots[slot].x + (Math.random() * 6 - 3), y: spots[slot].y + (Math.random() * 7 - 3.5) };
     const card = document.createElement('div');
+    slotCard[slot] = card;
     card.className = 'polaroid';
     card.style.left = at.x + '%';
     card.style.top = at.y + '%';
@@ -385,12 +422,6 @@
     card.querySelector('.ph').style.backgroundImage = 'url("' + url + '")';
     card.querySelector('.name').textContent = photo.name || '';
     pile.appendChild(card);
-    const staying = pile.querySelectorAll('.polaroid:not(.leaving)');
-    if (staying.length > MAX_POLAROIDS) {
-      const old = staying[0];
-      old.classList.add('leaving');
-      setTimeout(() => old.remove(), 700);
-    }
   }
   function shuffle(a) {
     for (let i = a.length - 1; i > 0; i--) {
@@ -467,6 +498,7 @@
   async function init() {
     try {
       const { event, photos } = await Camera.loadEvent();
+      EVENT = event;
       document.title = event.title + ' · Live Slideshow';
       Camera.applyCopy(event);
       Camera.applyBranding(event, { background: 'slide' });
