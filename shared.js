@@ -23,6 +23,7 @@
       headline: 'The wedding of',
       intro: "You've got {shots} shots on this camera. Like a real disposable, you can't delete them, so make them count.",
       nameLabel: 'Your name (so we know who took what)',
+      startButton: 'Open the camera',
       doneIcon: '♥',
       doneTitle: "That's a wrap!",
       doneText: "Your camera's out of film. Thank you for capturing our day.",
@@ -38,6 +39,7 @@
       headline: '',
       intro: "You've got {shots} shots to capture the moment. Every photo goes straight to the event album.",
       nameLabel: 'Your name (optional, for photo credit)',
+      startButton: 'Open the camera',
       doneIcon: '✦',
       doneTitle: "You're all out of shots",
       doneText: 'Thanks for sharing your view of the event!',
@@ -58,6 +60,11 @@
       out[k] = base[k].replace(/\{shots\}/g, ev.shots).replace(/\{title\}/g, ev.title);
     });
     if (ev.headline) out.headline = ev.headline;
+    // Per-event wording from the Mac app replaces the built-in text.
+    const custom = ev.text || {};
+    Object.keys(custom).forEach((k) => {
+      if (custom[k]) out[k] = String(custom[k]).replace(/\{shots\}/g, ev.shots).replace(/\{title\}/g, ev.title);
+    });
     return out;
   }
 
@@ -78,6 +85,28 @@
     const n = parseInt(hex.slice(1), 16);
     const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
     return lum > 0.62 ? '#1a1612' : '#ffffff';
+  }
+
+  // Title and body typefaces per event. Each is loaded from Google Fonts only when used.
+  const FONTS = {
+    classic: { serif: '"Cormorant Garamond", Georgia, serif', sans: 'Inter', load: null },
+    modern: { serif: '"DM Sans", Inter, sans-serif', sans: '"DM Sans"', load: 'DM+Sans:wght@400;500;600;700' },
+    elegant: { serif: '"Playfair Display", Georgia, serif', sans: 'Inter', load: 'Playfair+Display:ital,wght@0,500;0,600;1,500' },
+    script: { serif: '"Great Vibes", "Snell Roundhand", cursive', sans: 'Inter', load: 'Great+Vibes' },
+  };
+
+  function applyFont(name) {
+    const f = FONTS[name] || FONTS.classic;
+    if (f.load) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=' + f.load + '&display=swap';
+      document.head.appendChild(link);
+    }
+    const root = document.documentElement.style;
+    root.setProperty('--serif', f.serif);
+    root.setProperty('--sans', f.sans);
+    document.documentElement.dataset.font = name || 'classic';
   }
 
   function applyTheme(name, accent) {
@@ -179,6 +208,7 @@
   // Theme + logo + background in one go. Pages mark logo spots with <img data-logo hidden>.
   function applyBranding(ev, opts) {
     applyTheme(ev.theme, ev.accent);
+    applyFont(ev.font);
     document.querySelectorAll('img[data-logo]').forEach((img) => {
       if (!ev.logo) { img.hidden = true; return; }
       img.onload = () => { img.hidden = false; };
@@ -227,7 +257,7 @@
 
   window.Camera = {
     eventId: demo && !eventId ? 'demo' : eventId, demo,
-    loadEvent, applyTheme, applyBranding, assetUrl, applyCopy, copyFor, listPhotos, uploadPhoto, photoUrl, photoFallbackUrl, pageUrl,
+    loadEvent, applyTheme, applyFont, applyBranding, assetUrl, applyCopy, copyFor, listPhotos, uploadPhoto, photoUrl, photoFallbackUrl, pageUrl,
     adminPhotos, moderate,
   };
 })();

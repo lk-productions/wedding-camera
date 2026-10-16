@@ -20,7 +20,7 @@
     body {
       background: var(--bg);
       color: var(--ink);
-      font-family: Inter, system-ui, -apple-system, sans-serif;
+      font-family: var(--sans, Inter), system-ui, -apple-system, sans-serif;
       font-size: 16px;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
@@ -133,6 +133,9 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     html.loading main { visibility: hidden; }
+    /* Script faces read small and don't italicise well. */
+    html[data-font="script"] h1, html[data-font="script"] h2 { font-size: 52px; font-weight: 400; }
+    html[data-font="script"] .date, html[data-font="script"] .reel-cap { font-style: normal; }
 
     /* Branding */
     .logo { display: block; margin: 4px auto 0; max-width: 72%; max-height: 84px; object-fit: contain; }
@@ -165,7 +168,7 @@
       </label>
     </div>
     <div class="spacer"></div>
-    <button class="btn" id="start">Open the camera</button>
+    <button class="btn" id="start" data-copy="startButton">Open the camera</button>
   </section>
 
   <!-- Camera -->
