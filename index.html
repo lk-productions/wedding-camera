@@ -7,8 +7,8 @@
   <title>Disposable Camera</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="config.js?v=20261018c"></script>
-  <script src="shared.js?v=20261018c"></script>
+  <script src="config.js?v=20261018d"></script>
+  <script src="shared.js?v=20261018d"></script>
   <style>
     :root {
       --bg: #f6f1ea; --card: #fffdf9; --ink: #2b2622; --muted: #7b7068;
@@ -282,6 +282,11 @@
     <h2 id="message-title"></h2>
     <p class="lead" id="message-text"></p>
     <div class="spacer"></div>
+    <button class="poll-card" data-poll-slot hidden>
+      <span class="poll-tag">Live poll</span>
+      <b class="poll-q"></b>
+      <span class="poll-go">Vote</span>
+    </button>
     <div class="cta" data-closed hidden>
       <p class="cta-text"></p>
       <a class="btn cta-btn" target="_blank" rel="noopener"></a>
