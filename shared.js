@@ -198,8 +198,8 @@
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'vote', event: eventId, poll: pollId, option }),
     });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Vote failed');
+    const data = await readJSON(res);
+    if (!data.ok) throw finalError(data.error || 'Vote failed');
     return data.polls || [];
   }
 
@@ -223,8 +223,20 @@
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ event: eventId, image, name, shot }),
     });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Upload failed');
+    const data = await readJSON(res);
+    if (!data.ok) throw finalError(data.error || 'Upload failed');
+  }
+
+  // Under heavy load Google sometimes answers with an HTML error page instead of JSON. That
+  // (like a network failure) is worth retrying; an answer from the camera's code is not.
+  async function readJSON(res) {
+    try { return await res.json(); } catch (e) { throw new Error('Server busy'); }
+  }
+  function finalError(message) {
+    const e = new Error(message);
+    // A Google "service invoked too many times" / timeout error is worth another try.
+    e.final = !/too many|timed? ?out|try again|Service|Exceeded/i.test(message);
+    return e;
   }
 
   function photoUrl(photo, width) {

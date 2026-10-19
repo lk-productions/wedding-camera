@@ -7,8 +7,8 @@
   <title>Disposable Camera</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="config.js?v=20261019a"></script>
-  <script src="shared.js?v=20261019a"></script>
+  <script src="config.js?v=20261019b"></script>
+  <script src="shared.js?v=20261019b"></script>
   <style>
     :root {
       --bg: #f6f1ea; --card: #fffdf9; --ink: #2b2622; --muted: #7b7068;
@@ -328,6 +328,9 @@
     screens.forEach((s) => { $('screen-' + s).hidden = s !== name; });
     window.scrollTo(0, 0);
   }
+  function currentScreen() {
+    return screens.find((s) => !$('screen-' + s).hidden);
+  }
 
   function render() {
     document.title = CONFIG.title + ' · Camera';
@@ -377,6 +380,9 @@
     if (!CONFIG.open && state.used < CONFIG.shots) {
       showMessage('This camera is closed', Camera.copyFor(CONFIG).closed);
     }
+    else if (CONFIG.full && state.used < CONFIG.shots && !pendingFile) {
+      showMessage('The album is full', "It's holding all the photos it can. Thanks for being part of it!");
+    }
     else if (state.used >= CONFIG.shots) show('done');
     else if (state.started) show('camera');
     else show('welcome');
@@ -422,13 +428,30 @@
     $('keep').innerHTML = busy ? '<span class="spinner"></span> Developing…' : 'Add to the album';
   }
 
+  // With hundreds of guests at once Google can be slow or briefly refuse, so a failed send is
+  // retried a few times (spaced out, with a little randomness) before asking the guest.
+  const RETRY_DELAYS = [2000, 5000, 10000];
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function sendWithRetry(dataUrl) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await Camera.uploadPhoto(dataUrl, state.name, state.used + 1);
+      } catch (err) {
+        if (err.final || attempt >= RETRY_DELAYS.length) throw err;
+        setStatus('Busy moment. Still sending…');
+        await wait(RETRY_DELAYS[attempt] * (0.75 + Math.random() * 0.5));
+      }
+    }
+  }
+
   async function upload() {
     if (!pendingFile) return;
     setBusy(true);
     setStatus('Sending your photo…');
     try {
       const dataUrl = await compress();
-      await Camera.uploadPhoto(dataUrl, state.name, state.used + 1);
+      await sendWithRetry(dataUrl);
       state.used += 1;
       save();
       pendingFile = null;
@@ -438,6 +461,12 @@
     } catch (err) {
       console.error(err);
       setBusy(false);
+      if (err.message === 'album-full' || /closed/i.test(err.message)) {
+        pendingFile = null;
+        if (err.message === 'album-full') CONFIG.full = true; else CONFIG.open = false;
+        route();
+        return;
+      }
       $('keep').textContent = 'Try again';
       setStatus("Couldn't send. Check your signal and try again.", true);
     }
@@ -539,18 +568,27 @@
     try { setPolls(await Camera.listPolls()); } catch (e) {}
   }
 
+  // While a poll is open on screen its results update every ~8 seconds.
+  function pollLoop() {
+    clearTimeout(pollRefresh);
+    pollRefresh = setTimeout(async () => {
+      if (!pollShown) return;
+      await refreshPolls();
+      pollLoop();
+    }, jitter(8000));
+  }
+
   function openPoll(id) {
     pollShown = id;
     $('poll-status').textContent = '';
     renderPoll();
     show('poll');
-    clearInterval(pollRefresh);
-    pollRefresh = setInterval(refreshPolls, 5000);
+    pollLoop();
   }
 
   function closePoll() {
     pollShown = null;
-    clearInterval(pollRefresh);
+    clearTimeout(pollRefresh);
     route();
   }
 
@@ -601,7 +639,13 @@
     $('poll-status').textContent = 'Sending your vote…';
     $('poll-status').classList.remove('error');
     try {
-      const updated = await Camera.vote(p.id, i);
+      let updated;
+      for (let attempt = 0; ; attempt++) {
+        try { updated = await Camera.vote(p.id, i); break; } catch (err) {
+          if (err.final || attempt >= 2) throw err;
+          await wait((attempt + 1) * 2000 * (0.75 + Math.random() * 0.5));
+        }
+      }
       try { localStorage.setItem(voteKey(p.id), String(i)); } catch (e) {}
       $('poll-status').textContent = 'Thanks for voting!';
       setPolls(updated);
@@ -617,19 +661,65 @@
   });
   $('poll-back').addEventListener('click', closePoll);
 
+  // ---- Background refresh ----
+  // One request brings the event (open / full), photos and polls together. Phones refresh
+  // roughly every 45 seconds, at random times so a room full of them doesn't hit the server in
+  // step, only while the page is on screen, and back off if the server is struggling.
+  const REFRESH_MS = 45000;
+  let refreshDelay = REFRESH_MS;
+  let refreshTimer = null;
+  let lastRefresh = Date.now();
+  const jitter = (ms) => ms * (0.7 + Math.random() * 0.6);
+
+  async function refreshAll() {
+    lastRefresh = Date.now();
+    try {
+      const { event, photos, polls: list } = await Camera.loadEvent();
+      const was = CONFIG;
+      CONFIG = Object.assign({}, CONFIG, event);
+      setPolls(list || []);
+      refreshPhotos(photos);
+      const onCamera = ['camera', 'review'].indexOf(currentScreen()) >= 0;
+      if (!pollShown && !onCamera && (was.open !== CONFIG.open || was.full !== CONFIG.full)) route();
+      refreshDelay = REFRESH_MS;
+    } catch (err) {
+      refreshDelay = Math.min(refreshDelay * 2, 4 * 60000);
+    }
+  }
+
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(async () => {
+      if (!document.hidden) await refreshAll();
+      scheduleRefresh();
+    }, jitter(refreshDelay));
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && CONFIG && Date.now() - lastRefresh > 30000) { refreshAll(); scheduleRefresh(); }
+  });
+
+  async function loadWithRetry() {
+    for (let attempt = 0; ; attempt++) {
+      try { return await Camera.loadEvent(); } catch (err) {
+        if (err.code !== 'network' || attempt >= 2) throw err;
+        await wait(jitter(2500 * (attempt + 1)));
+      }
+    }
+  }
+
   async function init() {
     try {
-      const { event, photos, polls: firstPolls } = await Camera.loadEvent();
+      const { event, photos, polls: firstPolls } = await loadWithRetry();
       CONFIG = event;
       setPolls(firstPolls || []);
-      setInterval(refreshPolls, 15000);
       Camera.applyBranding(CONFIG, { background: 'phone' });
       setupCta(CONFIG);
       $('slideshow-link').href = Camera.pageUrl('slideshow.html');
       route();
       refreshPhotos(photos);
       setInterval(nextReel, 4000);
-      setInterval(() => refreshPhotos(), 30000);
+      scheduleRefresh();
     } catch (err) {
       if (err.code === 'missing' || err.code === 'not-found') {
         showMessage('Camera not found', 'Scan the QR code at your event to open its camera.');
