@@ -7,8 +7,8 @@
   <title>Disposable Camera</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="config.js?v=20261018b"></script>
-  <script src="shared.js?v=20261018b"></script>
+  <script src="config.js?v=20261018c"></script>
+  <script src="shared.js?v=20261018c"></script>
   <style>
     :root {
       --bg: #f6f1ea; --card: #fffdf9; --ink: #2b2622; --muted: #7b7068;
@@ -134,6 +134,29 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     html.loading main { visibility: hidden; }
 
+    /* Live polls */
+    .poll-card {
+      display: grid; grid-template-columns: 1fr auto; grid-template-areas: "tag go" "q go"; gap: 2px 12px;
+      align-items: center; text-align: left; width: 100%; font: inherit; cursor: pointer;
+      background: var(--card); color: var(--ink); border: 1.5px solid var(--accent); border-radius: 14px; padding: 12px 14px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .poll-tag { grid-area: tag; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+    .poll-q { grid-area: q; font-weight: 600; font-size: 15px; line-height: 1.3; }
+    .poll-go { grid-area: go; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 999px; white-space: nowrap; }
+    .poll-options { display: flex; flex-direction: column; gap: 10px; }
+    .poll-option {
+      font: inherit; font-size: 17px; font-weight: 500; text-align: left; cursor: pointer; width: 100%;
+      padding: 16px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink);
+    }
+    .poll-option:active { border-color: var(--accent); }
+    .poll-result { position: relative; border-radius: 12px; overflow: hidden; background: var(--card); border: 1px solid var(--line); padding: 14px 16px; }
+    .poll-result .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 22%, transparent); transition: width .8s ease; }
+    .poll-result.mine { border-color: var(--accent); }
+    .poll-result .row { position: relative; display: flex; justify-content: space-between; gap: 10px; font-size: 16px; }
+    .poll-result .row b { font-variant-numeric: tabular-nums; }
+    .poll-total { text-align: center; color: var(--muted); font-size: 14px; }
+
     /* After the last photo: a message and a button (e.g. donations) */
     .cta {
       display: flex; flex-direction: column; gap: 12px; text-align: center;
@@ -169,6 +192,11 @@
     <div class="reel" hidden></div>
     <div class="film no-reel" aria-hidden="true"></div>
     <p class="lead" data-copy="intro"></p>
+    <button class="poll-card" data-poll-slot hidden>
+      <span class="poll-tag">Live poll</span>
+      <b class="poll-q"></b>
+      <span class="poll-go">Vote</span>
+    </button>
     <div class="card">
       <label class="field"><span data-copy="nameLabel"></span>
         <input type="text" id="guest-name" autocomplete="name" maxlength="40" placeholder="Optional">
@@ -195,6 +223,11 @@
       <p class="count-label" id="left-label"></p>
     </div>
     <div class="spacer"></div>
+    <button class="poll-card" data-poll-slot hidden>
+      <span class="poll-tag">Live poll</span>
+      <b class="poll-q"></b>
+      <span class="poll-go">Vote</span>
+    </button>
     <p class="lead" style="font-size:14px">Tap the shutter to take a photo.</p>
   </section>
 
@@ -218,11 +251,28 @@
     <div class="reel" hidden></div>
     <p class="lead" data-title style="font-family:var(--serif);font-size:22px;font-style:italic"></p>
     <div class="spacer"></div>
+    <button class="poll-card" data-poll-slot hidden>
+      <span class="poll-tag">Live poll</span>
+      <b class="poll-q"></b>
+      <span class="poll-go">Vote</span>
+    </button>
     <div class="cta" hidden>
       <p class="cta-text"></p>
       <a class="btn cta-btn" target="_blank" rel="noopener"></a>
     </div>
     <a class="btn secondary" id="slideshow-link" href="slideshow.html">Watch the live slideshow</a>
+  </section>
+
+  <!-- Live poll -->
+  <section id="screen-poll" hidden>
+    <p class="eyebrow">Live poll</p>
+    <h2 id="poll-question"></h2>
+    <div class="poll-options" id="poll-body"></div>
+    <p class="poll-total" id="poll-total"></p>
+    <p class="status" id="poll-status" role="status"></p>
+    <div class="spacer"></div>
+    <button class="btn secondary" id="poll-next" hidden>Next poll</button>
+    <button class="btn secondary" id="poll-back">Back</button>
   </section>
 
   <!-- Missing / closed / offline -->
@@ -247,7 +297,7 @@
   const JPEG_QUALITY = 0.88;
   const STORE_KEY = 'wedcam-v1:' + Camera.eventId;
   const $ = (id) => document.getElementById(id);
-  const screens = ['welcome', 'camera', 'review', 'done', 'message'];
+  const screens = ['welcome', 'camera', 'review', 'done', 'message', 'poll'];
 
   let state = load();
   let pendingFile = null;
@@ -447,10 +497,114 @@
     }
   }
 
+  // ---- Live polls ----
+  let polls = [];
+  let pollShown = null;
+  let pollRefresh = null;
+
+  function voteKey(id) { return 'wedcam-vote:' + Camera.eventId + ':' + id; }
+  function myVote(id) {
+    try { const v = localStorage.getItem(voteKey(id)); return v === null ? null : Number(v); } catch (e) { return null; }
+  }
+  const livePolls = () => polls.filter((p) => p.open);
+
+  function setPolls(list) {
+    polls = list;
+    const live = livePolls();
+    document.querySelectorAll('[data-poll-slot]').forEach((slot) => {
+      slot.hidden = !live.length;
+      if (!live.length) return;
+      // The first one this phone hasn't answered yet, else the first.
+      const p = live.find((x) => myVote(x.id) === null) || live[0];
+      slot.dataset.poll = p.id;
+      slot.querySelector('.poll-q').textContent = live.length > 1 ? p.question + '  (+' + (live.length - 1) + ' more)' : p.question;
+      slot.querySelector('.poll-go').textContent = myVote(p.id) === null ? 'Vote' : 'Results';
+    });
+    if (pollShown) renderPoll();
+  }
+
+  async function refreshPolls() {
+    if (document.hidden || !CONFIG) return;
+    try { setPolls(await Camera.listPolls()); } catch (e) {}
+  }
+
+  function openPoll(id) {
+    pollShown = id;
+    $('poll-status').textContent = '';
+    renderPoll();
+    show('poll');
+    clearInterval(pollRefresh);
+    pollRefresh = setInterval(refreshPolls, 5000);
+  }
+
+  function closePoll() {
+    pollShown = null;
+    clearInterval(pollRefresh);
+    route();
+  }
+
+  function renderPoll() {
+    const p = polls.find((x) => x.id === pollShown);
+    if (!p) { closePoll(); return; }
+    $('poll-question').textContent = p.question;
+    const mine = myVote(p.id);
+    const body = $('poll-body');
+    body.innerHTML = '';
+    if (mine === null && p.open) {
+      p.options.forEach((text, i) => {
+        const b = document.createElement('button');
+        b.className = 'poll-option';
+        b.textContent = text;
+        b.onclick = () => castVote(p, i);
+        body.appendChild(b);
+      });
+      $('poll-total').textContent = '';
+    } else {
+      p.options.forEach((text, i) => {
+        const pct = p.total ? Math.round((p.counts[i] / p.total) * 100) : 0;
+        const r = document.createElement('div');
+        r.className = 'poll-result' + (i === mine ? ' mine' : '');
+        r.innerHTML = '<div class="fill"></div><div class="row"><span></span><b></b></div>';
+        r.querySelector('span').textContent = (i === mine ? '✓ ' : '') + text;
+        r.querySelector('b').textContent = pct + '%';
+        body.appendChild(r);
+        requestAnimationFrame(() => { r.querySelector('.fill').style.width = pct + '%'; });
+        setTimeout(() => { r.querySelector('.fill').style.width = pct + '%'; }, 50);
+      });
+      $('poll-total').textContent = p.total + (p.total === 1 ? ' vote' : ' votes') + (p.open ? ' · updating live' : ' · voting closed');
+    }
+    const others = livePolls().filter((x) => x.id !== p.id);
+    $('poll-next').hidden = !others.length;
+    $('poll-next').onclick = () => openPoll((others.find((x) => myVote(x.id) === null) || others[0]).id);
+  }
+
+  async function castVote(p, i) {
+    document.querySelectorAll('.poll-option').forEach((b) => { b.disabled = true; });
+    $('poll-status').textContent = 'Sending your vote…';
+    $('poll-status').classList.remove('error');
+    try {
+      const updated = await Camera.vote(p.id, i);
+      try { localStorage.setItem(voteKey(p.id), String(i)); } catch (e) {}
+      $('poll-status').textContent = 'Thanks for voting!';
+      setPolls(updated);
+    } catch (err) {
+      $('poll-status').textContent = err.message || "Couldn't send. Try again.";
+      $('poll-status').classList.add('error');
+      document.querySelectorAll('.poll-option').forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  document.querySelectorAll('[data-poll-slot]').forEach((slot) => {
+    slot.addEventListener('click', () => openPoll(slot.dataset.poll));
+  });
+  $('poll-back').addEventListener('click', closePoll);
+
   async function init() {
     try {
-      const { event, photos } = await Camera.loadEvent();
+      const { event, photos, polls: firstPolls } = await Camera.loadEvent();
       CONFIG = event;
+      setPolls(firstPolls || []);
+      setInterval(refreshPolls, 15000);
       Camera.applyBranding(CONFIG, { background: 'phone' });
       setupCta(CONFIG);
       $('slideshow-link').href = Camera.pageUrl('slideshow.html');

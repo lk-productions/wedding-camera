@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-  <script src="config.js?v=20261018b"></script>
-  <script src="shared.js?v=20261018b"></script>
+  <script src="config.js?v=20261018c"></script>
+  <script src="shared.js?v=20261018c"></script>
   <style>
     :root { --accent: #a8784f; --serif: "Cormorant Garamond", Georgia, serif; }
     * { box-sizing: border-box; }
@@ -160,6 +160,26 @@
     /* With the brand square in the wall, the floating logo and QR card aren't needed. */
     body.walled .join, body.walled .brand-logo { display: none !important; }
 
+    /* ---- Live poll results ---- */
+    .poll-scene {
+      position: fixed; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: center;
+      padding: 7vh 9vw; gap: 3.2vh; opacity: 0; transition: opacity 1s ease;
+      background: radial-gradient(circle at 50% 40%, #2b2622, #0a0a0a 78%);
+    }
+    body.has-bg .poll-scene { background: linear-gradient(rgba(0,0,0,.62), rgba(0,0,0,.72)), var(--bg-image) center / cover; }
+    .poll-scene.on { opacity: 1; }
+    .poll-scene .eyebrow { margin: 0; }
+    .poll-scene h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(30px, 4.6vw, 84px); line-height: 1.08; margin: 0; }
+    .poll-bars { display: flex; flex-direction: column; gap: 1.6vh; }
+    .poll-bar { position: relative; height: clamp(44px, 7vh, 96px); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.1); }
+    .poll-bar .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); transition: width 1.2s cubic-bezier(.2,.8,.3,1); }
+    .poll-bar.lead .fill { box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 60%, transparent); }
+    .poll-bar .row { position: relative; height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 2vw; font-size: clamp(16px, 2.2vw, 40px); font-weight: 600; }
+    .poll-bar .row b { font-variant-numeric: tabular-nums; }
+    .poll-foot { display: flex; align-items: center; gap: 2vw; color: #ccc; font-size: clamp(14px, 1.5vw, 26px); }
+    .poll-foot .qr { width: clamp(80px, 9vw, 150px); background: #fff; padding: 8px; border-radius: 10px; }
+    .poll-foot .qr svg { width: 100%; height: auto; display: block; }
+
     /* ---- Polaroid pile ---- */
     .pile { position: fixed; inset: 0; overflow: hidden; }
     .polaroid {
@@ -196,6 +216,12 @@
   <div class="wall" id="wall" hidden></div>
   <div class="pile" id="pile" hidden></div>
   <div class="shade" id="shade" hidden></div>
+  <div class="poll-scene" id="poll-scene" hidden>
+    <p class="eyebrow">Live poll</p>
+    <h1 id="poll-q"></h1>
+    <div class="poll-bars" id="poll-bars"></div>
+    <div class="poll-foot"><div class="qr" id="qr-poll"></div><span id="poll-foot-text"></span></div>
+  </div>
   <p class="caption" id="caption"></p>
 
   <img class="brand-logo" id="brand-logo" data-logo alt="" hidden>
@@ -241,11 +267,15 @@
 
 <script>
   // ?style=classic|kenburns|grid|polaroid  &secs=7 (seconds per photo)  &grid=4x3 (columns x rows)
+  // &polls=0 hides poll results; &pollevery=90 &pollsecs=20 set how often and for how long.
   const params = new URLSearchParams(location.search);
   const STYLES = ['classic', 'kenburns', 'grid', 'polaroid'];
   const STYLE = STYLES.includes(params.get('style')) ? params.get('style') : 'classic';
   const SLIDE_MS = Math.max(3, Math.min(30, Number(params.get('secs')) || 7)) * 1000;
   const REFRESH_MS = 20000;
+  const SHOW_POLLS = params.get('polls') !== '0';
+  const POLL_EVERY_MS = Math.max(20, Number(params.get('pollevery')) || 90) * 1000;
+  const POLL_MS = Math.max(8, Number(params.get('pollsecs')) || 20) * 1000;
   const $ = (id) => document.getElementById(id);
   document.body.classList.add('style-' + STYLE);
   let EVENT = null;
@@ -333,7 +363,69 @@
     return STYLE;
   }
 
+  // ---- Live poll results, every so often ----
+  let polls = [];
+  let pollTurn = 0;
+  let nextPollAt = Date.now() + POLL_EVERY_MS / 2;
+
+  async function refreshPolls() {
+    try { polls = await Camera.listPolls(); } catch (e) {}
+  }
+
+  function showable() { return polls.filter((p) => p.show && (p.open || p.total > 0)); }
+
+  function drawPoll(p) {
+    $('poll-q').textContent = p.question;
+    const bars = $('poll-bars');
+    if (bars.dataset.poll !== p.id) {
+      bars.dataset.poll = p.id;
+      bars.innerHTML = '';
+      p.options.forEach(() => {
+        const bar = document.createElement('div');
+        bar.className = 'poll-bar';
+        bar.innerHTML = '<div class="fill"></div><div class="row"><span></span><b></b></div>';
+        bars.appendChild(bar);
+      });
+    }
+    const top = Math.max(...p.counts);
+    [...bars.children].forEach((bar, i) => {
+      const pct = p.total ? Math.round((p.counts[i] / p.total) * 100) : 0;
+      bar.querySelector('span').textContent = p.options[i];
+      bar.querySelector('b').textContent = pct + '%';
+      bar.classList.toggle('lead', p.total > 0 && p.counts[i] === top);
+      bar.querySelector('.fill').style.width = pct + '%';
+    });
+    $('poll-foot-text').textContent = (p.open ? 'Scan to vote · ' : 'Voting closed · ') + p.total + (p.total === 1 ? ' vote' : ' votes');
+  }
+
+  async function pollSegment() {
+    await refreshPolls();
+    const list = showable();
+    if (!list.length) return;
+    const p = list[pollTurn++ % list.length];
+    const scene = $('poll-scene');
+    $('poll-bars').dataset.poll = '';
+    scene.hidden = false;
+    drawPoll(Object.assign({}, p, { counts: p.counts.map(() => 0), total: p.total }));
+    void scene.offsetWidth;
+    scene.classList.add('on');
+    setTimeout(() => drawPoll(p), 300); // bars grow in from zero
+    const live = setInterval(async () => {
+      await refreshPolls();
+      const now = polls.find((x) => x.id === p.id);
+      if (now) drawPoll(now);
+    }, 4000);
+    await new Promise((r) => setTimeout(r, POLL_MS));
+    clearInterval(live);
+    scene.classList.remove('on');
+    setTimeout(() => { scene.hidden = true; }, 1000);
+  }
+
   function step() {
+    if (SHOW_POLLS && Date.now() >= nextPollAt) {
+      nextPollAt = Date.now() + POLL_EVERY_MS;
+      return pollSegment().finally(step);
+    }
     const mode = activeStyle();
     showStage(mode);
     if (mode === 'grid') return stepGrid().finally(() => setTimeout(step, Math.max(1200, SLIDE_MS / 3)));
@@ -617,11 +709,13 @@
 
   async function init() {
     try {
-      const { event, photos } = await Camera.loadEvent();
+      const { event, photos, polls: firstPolls } = await Camera.loadEvent();
+      polls = firstPolls || [];
       EVENT = event;
       document.title = event.title + ' · Live Slideshow';
       Camera.applyCopy(event);
       Camera.applyBranding(event, { background: 'slide' });
+      $('qr-poll').innerHTML = qrSvg();
       refresh(photos);
       setInterval(() => refresh(), REFRESH_MS);
     } catch (err) {

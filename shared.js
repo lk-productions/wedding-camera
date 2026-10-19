@@ -128,7 +128,7 @@
   // Resolves to { event, photos }. Rejects with err.code = 'missing' | 'not-found' | 'network'.
   async function loadEvent() {
     if (!eventId && !demo) throw codeError('missing');
-    if (demo) return { event: DEMO_EVENT, photos: await demoPhotos() };
+    if (demo) return { event: DEMO_EVENT, photos: await demoPhotos(), polls: demoPolls };
     let data;
     try {
       const res = await fetch(apiUrl + '?action=event&e=' + encodeURIComponent(eventId), { cache: 'no-store' });
@@ -137,7 +137,7 @@
       throw codeError('network');
     }
     if (!data.ok) throw codeError(data.error === 'not-found' ? 'not-found' : 'network');
-    return { event: data.event, photos: useSamples ? await demoPhotos() : (data.photos || []) };
+    return { event: data.event, photos: useSamples ? await demoPhotos() : (data.photos || []), polls: data.polls || [] };
   }
 
   function codeError(code) {
@@ -169,6 +169,36 @@
     if (!data.ok) throw new Error(data.error || 'Update failed');
   }
   const demoStatus = {};
+
+  // ---- Polls ----
+  const demoPolls = [{
+    id: 'demo1', question: 'What should the DJ play next?', options: ['Throwbacks', 'Country', 'Top 40', 'Slow dance'],
+    open: true, show: true, counts: [12, 5, 9, 4], total: 30,
+  }];
+
+  async function listPolls() {
+    if (demo) return demoPolls;
+    const res = await fetch(apiUrl + '?action=polls&e=' + encodeURIComponent(eventId), { cache: 'no-store' });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Polls failed');
+    return data.polls || [];
+  }
+
+  async function vote(pollId, option) {
+    if (demo) {
+      const p = demoPolls.find((x) => x.id === pollId);
+      p.counts[option] += 1; p.total += 1;
+      return demoPolls;
+    }
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'vote', event: eventId, poll: pollId, option }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Vote failed');
+    return data.polls || [];
+  }
 
   async function listPhotos() {
     if (useSamples) return demoPhotos();
@@ -258,6 +288,6 @@
   window.Camera = {
     eventId: demo && !eventId ? 'demo' : eventId, demo,
     loadEvent, applyTheme, applyFont, applyBranding, assetUrl, applyCopy, copyFor, listPhotos, uploadPhoto, photoUrl, photoFallbackUrl, pageUrl,
-    adminPhotos, moderate,
+    adminPhotos, moderate, listPolls, vote,
   };
 })();
