@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-  <script src="config.js?v=20261018a"></script>
-  <script src="shared.js?v=20261018a"></script>
+  <script src="config.js?v=20261018b"></script>
+  <script src="shared.js?v=20261018b"></script>
   <style>
     :root { --accent: #a8784f; --serif: "Cormorant Garamond", Georgia, serif; }
     * { box-sizing: border-box; }
@@ -125,13 +125,14 @@
     }
     .wall.on { opacity: 1; }
     .tile { perspective: 1400px; min-width: 0; min-height: 0; }
-    .tile-inner { position: relative; width: 100%; height: 100%; transition: transform .9s cubic-bezier(.45,.05,.35,1); transform-style: preserve-3d; }
+    .tile-inner { position: relative; width: 100%; height: 100%; transition: transform .9s cubic-bezier(.45,.05,.35,1); transform-style: preserve-3d; will-change: transform; }
     .tile.flipped .tile-inner { transform: rotateY(180deg); }
     .face {
       position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
       background: #111 center / cover no-repeat; border-radius: 4px; overflow: hidden;
     }
     .face.back { transform: rotateY(180deg); }
+    .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .face::after { content: ""; position: absolute; inset: 50% 0 0; background: linear-gradient(transparent, rgba(0,0,0,.55)); }
     .face .name {
       position: absolute; left: 14px; bottom: 10px; z-index: 1; color: #fff;
@@ -140,15 +141,22 @@
     }
 
     /* The grid's bottom-right square: logo, QR code and "share your photos". */
+    /* Everything inside is sized from --u (the tile's shorter side, set by script), so it fits
+       whatever size the grid and the screen are. */
     .brand-tile {
-      background: #fbfbfb; border-radius: 4px; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 3%; padding: 4%; text-align: center; min-width: 0; min-height: 0;
+      --u: 200px;
+      background: #fbfbfb; border-radius: 4px; display: flex; flex-direction: column; overflow: hidden;
+      align-items: center; justify-content: center; gap: calc(var(--u) * .035); padding: calc(var(--u) * .06);
+      text-align: center; min-width: 0; min-height: 0;
     }
-    .brand-tile img { max-width: 70%; max-height: 17%; object-fit: contain; }
-    .brand-tile .qr { height: 46%; aspect-ratio: 1; }
+    .brand-tile img { max-width: 80%; max-height: calc(var(--u) * .15); object-fit: contain; flex: none; }
+    .brand-tile .qr { width: calc(var(--u) * var(--qr, .46)); height: calc(var(--u) * var(--qr, .46)); flex: none; }
     .brand-tile .qr svg { width: 100%; height: 100%; display: block; }
-    .brand-tile b { font-family: var(--serif); font-weight: 600; font-size: clamp(14px, 2.2vw, 40px); color: var(--accent); line-height: 1.1; }
-    .brand-tile small { font-size: clamp(10px, 1.05vw, 19px); color: #777; }
+    .brand-tile b {
+      font-family: var(--serif); font-weight: 600; color: var(--accent); line-height: 1.05;
+      font-size: calc(var(--u) * .1 * var(--fit, 1)); white-space: nowrap;
+    }
+    .brand-tile small { font-size: calc(var(--u) * .048 * var(--fit, 1)); color: #777; white-space: nowrap; }
     /* With the brand square in the wall, the floating logo and QR card aren't needed. */
     body.walled .join, body.walled .brand-logo { display: none !important; }
 
@@ -287,6 +295,15 @@
   }
 
   // Resolves to a URL that actually loads (Drive thumbnail, then Google's image CDN), or null.
+  const decoded = []; // recent decoded images, kept so the browser doesn't throw them away
+
+  // Decodes an image ahead of showing it, but never waits more than 1.5 s: some browsers hold
+  // decodes while a tab isn't being painted, and the show must go on regardless.
+  function decodeSoon(img) {
+    const done = img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+    return Promise.race([done, new Promise((r) => setTimeout(r, 1500))]);
+  }
+
   function loadPhoto(photo, width) {
     return new Promise((resolve) => {
       const urls = [Camera.photoUrl(photo, width)];
@@ -295,7 +312,14 @@
         const url = urls.shift();
         if (!url) return resolve(null);
         const img = new Image();
-        img.onload = () => resolve(url);
+        img.onload = () => {
+          // Decode now, off the animation, so nothing stutters when it appears.
+          decodeSoon(img).then(() => {
+            decoded.push(img);
+            if (decoded.length > 80) decoded.shift();
+            resolve(url);
+          });
+        };
         img.onerror = tryNext;
         img.src = url;
       };
@@ -348,9 +372,19 @@
     return [5, 4];
   }
 
-  function face(el, url, name) {
-    el.style.backgroundImage = url ? 'url("' + url + '")' : '';
+  async function face(el, url, name) {
+    const img = el.querySelector('img');
+    if (url && img.src !== url) {
+      img.src = url;
+      await decodeSoon(img);
+    }
     el.querySelector('.name').textContent = name || '';
+  }
+
+  // Tile photos are fetched at about the size they're shown, not always 900 px.
+  function tileWidth(cols) {
+    const px = (window.innerWidth / cols) * (window.devicePixelRatio || 1);
+    return px <= 420 ? 400 : px <= 650 ? 640 : 900;
   }
 
   async function stepGrid() {
@@ -361,17 +395,17 @@
     const tile = oldest[Math.floor(Math.random() * oldest.length)];
     const photo = pick(new Set(tiles.map((t) => t.id)));
     if (!photo) return;
-    const url = await loadPhoto(photo, 900);
+    const url = await loadPhoto(photo, tileWidth(cols));
     if (!url) return;
     const hidden = tile.el.classList.contains('flipped') ? tile.front : tile.back;
-    face(hidden, url, photo.name);
+    await face(hidden, url, photo.name);
     tile.el.classList.toggle('flipped');
     tile.id = photo.id;
     tile.last = Date.now();
   }
 
   async function buildWall(cols, rows) {
-    const wall = $('wall');
+    const old = $('wall');
     const count = cols * rows;
     const chosen = new Set();
     const photos = [];
@@ -380,38 +414,67 @@
       if (p) { photos.push(p); chosen.add(p.id); }
     }
     if (!photos.length) return;
-    const urls = await Promise.all(photos.map((p) => loadPhoto(p, 900)));
-    wall.classList.remove('on');
+    const width = tileWidth(cols);
+    const urls = await Promise.all(photos.map((p) => loadPhoto(p, width)));
+
+    // Built off to the side and faded in over the old wall, so the screen never goes blank.
+    const wall = document.createElement('div');
+    wall.className = 'wall';
     wall.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
     wall.style.gridTemplateRows = 'repeat(' + rows + ', 1fr)';
-    wall.innerHTML = '';
-    tiles = [];
-    // The bottom-right cell is the brand square: logo, QR code and the invitation.
-    const photoCells = count - 1;
-    for (let i = 0; i < photoCells; i++) {
+    const built = [];
+    for (let i = 0; i < count - 1; i++) {
       const p = photos[i % photos.length];
       const el = document.createElement('div');
       el.className = 'tile';
-      el.innerHTML = '<div class="tile-inner"><div class="face front"><span class="name"></span></div>' +
-                     '<div class="face back"><span class="name"></span></div></div>';
+      el.innerHTML = '<div class="tile-inner"><div class="face front"><img alt=""><span class="name"></span></div>' +
+                     '<div class="face back"><img alt=""><span class="name"></span></div></div>';
       const t = { el, front: el.querySelector('.front'), back: el.querySelector('.back'), id: p.id,
                   last: Date.now() - Math.random() * 5000 };
-      face(t.front, urls[i % photos.length], p.name);
       wall.appendChild(el);
-      tiles.push(t);
+      built.push(face(t.front, urls[i % photos.length], p.name).then(() => t));
     }
+    wall.appendChild(brandTile());
+    old.after(wall);
+    tiles = await Promise.all(built);
+    gridDims = cols + 'x' + rows;
+    fitBrand(wall.querySelector('.brand-tile'));
+    void wall.offsetWidth; // commit the hidden state so the fade-in runs
+    wall.classList.add('on');
+    old.removeAttribute('id');
+    wall.id = 'wall';
+    setTimeout(() => { if (old.isConnected && old !== wall) { old.remove(); } }, 1400);
+  }
+
+  // The bottom-right square: logo, QR code and the invitation.
+  function brandTile() {
     const brand = document.createElement('div');
     brand.className = 'brand-tile';
     const words = EVENT ? Camera.copyFor(EVENT) : {};
-    brand.innerHTML = (EVENT && EVENT.logo ? '<img alt="">' : '') + '<div class="qr"></div><b></b><small></small>';
-    if (EVENT && EVENT.logo) brand.querySelector('img').src = Camera.assetUrl(EVENT.logo, 600);
+    const hasLogo = !!(EVENT && EVENT.logo);
+    brand.innerHTML = (hasLogo ? '<img alt="">' : '') + '<div class="qr"></div><b></b><small></small>';
+    if (hasLogo) brand.querySelector('img').src = Camera.assetUrl(EVENT.logo, 600);
+    brand.style.setProperty('--qr', hasLogo ? '.42' : '.5');
     brand.querySelector('.qr').innerHTML = qrSvg();
     brand.querySelector('b').textContent = words.joinTitle || '';
     brand.querySelector('small').textContent = words.joinSub || '';
-    wall.appendChild(brand);
-    gridDims = cols + 'x' + rows;
-    void wall.offsetWidth; // commit the hidden state so the fade-in runs
-    wall.classList.add('on');
+    return brand;
+  }
+
+  // Sizes the brand square's contents from the square itself, shrinking long words to fit.
+  function fitBrand(brand) {
+    if (!brand) return;
+    const apply = () => {
+      const w = brand.clientWidth, h = brand.clientHeight;
+      if (!w || !h) return;
+      brand.style.setProperty('--u', Math.min(w, h) + 'px');
+      brand.style.setProperty('--fit', 1);
+      const widest = Math.max(brand.querySelector('b').scrollWidth, brand.querySelector('small').scrollWidth);
+      if (widest > w * 0.9) brand.style.setProperty('--fit', ((w * 0.9) / widest).toFixed(3));
+    };
+    apply();
+    if (window.ResizeObserver) new ResizeObserver(apply).observe(brand);
+    else window.addEventListener('resize', apply);
   }
 
   // ---- Polaroid pile ----
@@ -475,7 +538,8 @@
     const url = Camera.photoUrl(photo, 1920);
     let triedFallback = false;
 
-    img.onload = () => {
+    img.onload = async () => {
+      await decodeSoon(img);
       slide.querySelector('.blur').style.backgroundImage = 'url("' + img.src + '")';
       $('slide-' + current).classList.remove('on');
       slide.classList.remove('on');
