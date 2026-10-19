@@ -7,8 +7,8 @@
   <title>Disposable Camera</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="config.js?v=20261018d"></script>
-  <script src="shared.js?v=20261018d"></script>
+  <script src="config.js?v=20261019a"></script>
+  <script src="shared.js?v=20261019a"></script>
   <style>
     :root {
       --bg: #f6f1ea; --card: #fffdf9; --ink: #2b2622; --muted: #7b7068;
@@ -156,6 +156,10 @@
     .poll-result .row { position: relative; display: flex; justify-content: space-between; gap: 10px; font-size: 16px; }
     .poll-result .row b { font-variant-numeric: tabular-nums; }
     .poll-total { text-align: center; color: var(--muted); font-size: 14px; }
+    .poll-result.right { border: 2px solid #2f8a55; }
+    .poll-result.right .fill { background: color-mix(in srgb, #2f8a55 26%, transparent); }
+    .poll-result.wrong { opacity: .55; }
+    .poll-verdict { text-align: center; font-weight: 600; font-size: 18px; margin: 0; }
 
     /* After the last photo: a message and a button (e.g. donations) */
     .cta {
@@ -267,6 +271,7 @@
   <section id="screen-poll" hidden>
     <p class="eyebrow">Live poll</p>
     <h2 id="poll-question"></h2>
+    <p class="poll-verdict" id="poll-verdict" hidden></p>
     <div class="poll-options" id="poll-body"></div>
     <p class="poll-total" id="poll-total"></p>
     <p class="status" id="poll-status" role="status"></p>
@@ -511,7 +516,8 @@
   function myVote(id) {
     try { const v = localStorage.getItem(voteKey(id)); return v === null ? null : Number(v); } catch (e) { return null; }
   }
-  const livePolls = () => polls.filter((p) => p.open);
+  // Open polls, plus answered quizzes whose answer is now out (so voters can see how they did).
+  const livePolls = () => polls.filter((p) => (p.open && !p.reveal) || (p.reveal && myVote(p.id) !== null));
 
   function setPolls(list) {
     polls = list;
@@ -523,7 +529,7 @@
       const p = live.find((x) => myVote(x.id) === null) || live[0];
       slot.dataset.poll = p.id;
       slot.querySelector('.poll-q').textContent = live.length > 1 ? p.question + '  (+' + (live.length - 1) + ' more)' : p.question;
-      slot.querySelector('.poll-go').textContent = myVote(p.id) === null ? 'Vote' : 'Results';
+      slot.querySelector('.poll-go').textContent = p.reveal ? 'See answer' : (myVote(p.id) === null ? 'Vote' : 'Results');
     });
     if (pollShown) renderPoll();
   }
@@ -555,7 +561,13 @@
     const mine = myVote(p.id);
     const body = $('poll-body');
     body.innerHTML = '';
-    if (mine === null && p.open) {
+    const revealed = p.reveal && p.correct !== null && p.correct !== undefined;
+    const verdict = $('poll-verdict');
+    verdict.hidden = !(revealed && mine !== null);
+    if (revealed && mine !== null) {
+      verdict.textContent = mine === p.correct ? 'You got it! 🎉' : 'Not quite. The answer was ' + p.options[p.correct] + '.';
+    }
+    if (mine === null && p.open && !p.reveal) {
       p.options.forEach((text, i) => {
         const b = document.createElement('button');
         b.className = 'poll-option';
@@ -568,15 +580,16 @@
       p.options.forEach((text, i) => {
         const pct = p.total ? Math.round((p.counts[i] / p.total) * 100) : 0;
         const r = document.createElement('div');
-        r.className = 'poll-result' + (i === mine ? ' mine' : '');
+        r.className = 'poll-result' + (i === mine ? ' mine' : '') + (revealed ? (i === p.correct ? ' right' : ' wrong') : '');
         r.innerHTML = '<div class="fill"></div><div class="row"><span></span><b></b></div>';
-        r.querySelector('span').textContent = (i === mine ? '✓ ' : '') + text;
+        r.querySelector('span').textContent = (revealed && i === p.correct ? '✅  ' : (i === mine ? '✓ ' : '')) + text;
         r.querySelector('b').textContent = pct + '%';
         body.appendChild(r);
         requestAnimationFrame(() => { r.querySelector('.fill').style.width = pct + '%'; });
         setTimeout(() => { r.querySelector('.fill').style.width = pct + '%'; }, 50);
       });
-      $('poll-total').textContent = p.total + (p.total === 1 ? ' vote' : ' votes') + (p.open ? ' · updating live' : ' · voting closed');
+      $('poll-total').textContent = p.total + (p.total === 1 ? ' vote' : ' votes') +
+        (revealed ? '' : p.quiz ? ' · the answer is revealed soon' : (p.open ? ' · updating live' : ' · voting closed'));
     }
     const others = livePolls().filter((x) => x.id !== p.id);
     $('poll-next').hidden = !others.length;

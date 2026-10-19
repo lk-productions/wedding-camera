@@ -174,6 +174,9 @@
   const demoPolls = [{
     id: 'demo1', question: 'What should the DJ play next?', options: ['Throwbacks', 'Country', 'Top 40', 'Slow dance'],
     open: true, show: true, counts: [12, 5, 9, 4], total: 30,
+  }, {
+    id: 'demo2', question: 'What year was Lewis University founded?', options: ['1932', '1952', '1972'],
+    open: false, show: true, quiz: true, reveal: true, correct: 0, counts: [14, 9, 4], total: 27,
   }];
 
   async function listPolls() {
