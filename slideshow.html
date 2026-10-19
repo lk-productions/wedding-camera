@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-  <script src="config.js?v=20261016c"></script>
-  <script src="shared.js?v=20261016c"></script>
+  <script src="config.js?v=20261018a"></script>
+  <script src="shared.js?v=20261018a"></script>
   <style>
     :root { --accent: #a8784f; --serif: "Cormorant Garamond", Georgia, serif; }
     * { box-sizing: border-box; }
@@ -87,8 +87,19 @@
       background: rgba(0,0,0,.35); padding: 6px 12px; border-radius: 999px;
     }
     body:not(.playing) .brand-logo { display: none; }
+    .tools { position: fixed; top: 3vh; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; gap: 8px; transition: opacity .4s; }
+    body.idle .tools { opacity: 0; pointer-events: none; }
+    .tv-help {
+      position: fixed; top: calc(3vh + 50px); left: 50%; transform: translateX(-50%); z-index: 5;
+      width: min(440px, 92vw); background: rgba(20,20,20,.94); color: #eee; border: 1px solid rgba(255,255,255,.15);
+      border-radius: 16px; padding: 18px 20px; font-size: 14px; line-height: 1.45; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .tv-help h3 { margin: 0 0 10px; font-size: 16px; }
+    .tv-way { padding: 10px 0; border-top: 1px solid rgba(255,255,255,.1); }
+    .tv-way p { margin: 4px 0 0; color: #bbb; }
+    .tv-go { margin-top: 8px; font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 999px; border: 0; background: #fff; color: #111; cursor: pointer; }
+    .tv-close { position: absolute; top: 8px; right: 12px; background: none; border: 0; color: #aaa; font-size: 22px; cursor: pointer; }
     .fs {
-      position: fixed; top: 3vh; left: 50%; transform: translateX(-50%); z-index: 4;
       font: inherit; font-size: 14px; color: #fff; cursor: pointer;
       background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.3);
       padding: 8px 14px; border-radius: 999px; transition: opacity .4s;
@@ -197,7 +208,28 @@
   </div>
 
   <span class="count" id="count" hidden></span>
-  <button class="fs" id="fs">Full screen</button>
+  <div class="tools" id="tools">
+    <button class="fs" id="fs">Full screen</button>
+    <button class="fs" id="tv">Send to TV</button>
+  </div>
+  <div class="tv-help" id="tv-help" hidden>
+    <button class="tv-close" id="tv-close" aria-label="Close">×</button>
+    <h3>Show this on a TV</h3>
+    <div class="tv-way" id="tv-cast">
+      <b>Chromecast / Google TV</b>
+      <p id="tv-cast-text">In Chrome, click <b>⋮</b> → <b>Cast…</b> and pick your TV. Then click Full screen.</p>
+      <button class="tv-go" id="tv-cast-go" hidden>Cast this slideshow</button>
+    </div>
+    <div class="tv-way">
+      <b>AirPlay (Apple TV)</b>
+      <p><b>Mac:</b> Control Center → Screen Mirroring → your Apple TV, then Full screen.<br>
+         <b>iPhone / iPad:</b> turn sideways, Control Center → Screen Mirroring → your Apple TV.</p>
+    </div>
+    <div class="tv-way">
+      <b>Smart TV with a browser</b>
+      <p>Open this same link in the TV's browser.</p>
+    </div>
+  </div>
 
 <script>
   // ?style=classic|kenburns|grid|polaroid  &secs=7 (seconds per photo)  &grid=4x3 (columns x rows)
@@ -475,6 +507,27 @@
       }
     };
     img.src = url;
+  }
+
+  // ---- Send to TV ----
+  $('tv').addEventListener('click', () => { $('tv-help').hidden = !$('tv-help').hidden; wake(); });
+  $('tv-close').addEventListener('click', () => { $('tv-help').hidden = true; });
+  // Chrome can cast a page straight to a Chromecast; other browsers get the steps instead.
+  if ('PresentationRequest' in window) {
+    $('tv-cast-go').hidden = false;
+    $('tv-cast-text').textContent = 'Pick your TV in the list Chrome shows. If it isn\'t there, use Chrome\'s ⋮ menu → Cast… instead.';
+    $('tv-cast-go').addEventListener('click', async () => {
+      try {
+        await new PresentationRequest([location.href]).start();
+        $('tv-help').hidden = true;
+      } catch (err) {
+        if (err && err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+          $('tv-cast-text').textContent = 'That didn\'t work here. Use Chrome\'s ⋮ menu → Cast… and pick your TV.';
+        }
+      }
+    });
+  } else if (!/Chrome|CriOS/.test(navigator.userAgent)) {
+    $('tv-cast-text').textContent = 'Open this link in Chrome, then ⋮ → Cast… and pick your TV.';
   }
 
   // Full screen + hide cursor when idle
