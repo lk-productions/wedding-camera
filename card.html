@@ -3,148 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f6f1ea">
-  <title>QR Table Card</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-  <script src="config.js?v=20261019b"></script>
-  <script src="shared.js?v=20261019b"></script>
-  <style>
-    :root {
-      --bg: #f6f1ea; --card: #fffdf9; --ink: #2b2622; --muted: #7b7068; --accent: #a8784f; --line: #e6ddd2;
-      --serif: "Cormorant Garamond", Georgia, serif;
-    }
-    @page { size: 5in 7in; margin: 0; }
-    [hidden] { display: none !important; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; background: #e9e5df; color: var(--ink);
-      font-family: var(--sans, Inter), system-ui, sans-serif;
-      display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px 16px;
-      -webkit-print-color-adjust: exact; print-color-adjust: exact;
-    }
-    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
-    .toolbar button {
-      font: inherit; font-weight: 600; padding: 10px 20px; border-radius: 999px; border: 0;
-      background: #2b2622; color: #fff; cursor: pointer;
-    }
-    .toolbar span { color: #6b625b; font-size: 14px; }
-    .toolbar button.secondary { background: #fff; color: #2b2622; border: 1px solid #d8d0c6; }
-    .toolbar .switch { font-size: 14px; color: #2b2622; text-decoration: underline; cursor: pointer; }
-    /* Just the code: for dropping into your own designs. */
-    .qr-only { width: 4in; max-width: 100%; background: #fff; padding: .25in; box-shadow: 0 10px 40px rgba(0,0,0,.15); }
-    .qr-only svg { width: 100%; height: auto; display: block; }
-    @media print { .qr-only { box-shadow: none; margin: 1in auto; } }
-
-    .card {
-      width: 5in; height: 7in; max-width: 100%;
-      background: var(--bg);
-      box-shadow: 0 10px 40px rgba(0,0,0,.15);
-      padding: .45in .4in;
-      display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-      text-align: center; position: relative;
-    }
-    .card::before {
-      content: ""; position: absolute; inset: .18in;
-      border: 1px solid var(--accent); opacity: .5; pointer-events: none;
-    }
-    .logo { display: block; margin: 0 auto 10px; max-width: 2.4in; max-height: .7in; object-fit: contain; }
-    .eyebrow { letter-spacing: .22em; text-transform: uppercase; font-size: 10pt; color: var(--accent); margin: 0; }
-    h1 { font-family: var(--serif); font-weight: 600; font-size: 34pt; line-height: 1.02; margin: 8px 0 0; }
-    .sub { font-size: 11pt; color: var(--muted); margin: 10px 0 0; line-height: 1.45; }
-    .qr { width: 2.3in; height: 2.3in; background: #fff; padding: .14in; border-radius: 10px; }
-    .qr svg { width: 100%; height: 100%; display: block; }
-    .steps { display: flex; gap: 14px; font-size: 9pt; color: var(--muted); }
-    .steps b { display: block; color: var(--ink); font-size: 10pt; }
-    .names { font-family: var(--serif); font-style: italic; font-size: 20pt; margin: 0; }
-    .date { font-size: 9pt; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 2px 0 0; }
-
-    @media print {
-      body { background: none; padding: 0; display: block; }
-      .toolbar { display: none; }
-      .card { box-shadow: none; margin: 0; }
-    }
-  </style>
+  <meta name="robots" content="noindex">
+  <title>LK Moments</title>
+  <script>
+    // This site moved to /moments/. Keep the page and the ?e=… event link.
+    location.replace(location.href.replace('/wedding-camera/', '/moments/'));
+  </script>
+  <noscript><meta http-equiv="refresh" content="0; url=https://lk-productions.github.io/moments/"></noscript>
+  <style>body{font-family:system-ui,sans-serif;text-align:center;padding:20vh 16px;color:#555}</style>
 </head>
 <body>
-  <div class="toolbar">
-    <button onclick="window.print()">Print</button>
-    <button class="secondary" id="dl-png" hidden>Download PNG</button>
-    <button class="secondary" id="dl-svg" hidden>Download SVG</button>
-    <a class="switch" id="switch"></a>
-    <span id="hint">Prints as a 5×7 card. Choose "Fit to page" for letter paper.</span>
-  </div>
-
-  <div class="qr-only" id="qr-only" hidden></div>
-
-  <div class="card" id="card" hidden>
-    <div>
-      <img class="logo" data-logo alt="" hidden>
-      <p class="eyebrow" data-copy="cardEyebrow"></p>
-      <h1 data-copy="cardTitle"></h1>
-      <p class="sub" data-copy="cardSub"></p>
-    </div>
-    <div class="qr" id="qr"></div>
-    <div class="steps">
-      <div><b>1. Scan</b>with your phone camera</div>
-      <div><b>2. Shoot</b><span id="shots-step"></span></div>
-      <div><b>3. Watch</b>them on the slideshow</div>
-    </div>
-    <div>
-      <p class="names" data-title></p>
-      <p class="date" data-date></p>
-    </div>
-  </div>
-  <p id="error" hidden></p>
-
-<script>
-  (async () => {
-    try {
-      const { event } = await Camera.loadEvent();
-      Camera.applyBranding(event);
-      document.title = event.title + ' · QR Card';
-      Camera.applyCopy(event);
-      document.getElementById('shots-step').textContent = event.shots + ' photos, no deleting';
-
-      const qr = qrcode(0, 'M');
-      qr.addData(Camera.pageUrl('./'));
-      qr.make();
-      const svg = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true });
-      document.getElementById('qr').innerHTML = svg;
-
-      const only = new URLSearchParams(location.search).get('qr') === 'only';
-      const sw = document.getElementById('switch');
-      const other = new URL(location.href);
-      if (only) other.searchParams.delete('qr'); else other.searchParams.set('qr', 'only');
-      sw.href = other.href;
-      sw.textContent = only ? 'Show the full card' : 'Just the QR code';
-      if (only) {
-        document.title = event.title + ' · QR Code';
-        document.getElementById('qr-only').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 4, scalable: true });
-        document.getElementById('qr-only').hidden = false;
-        document.getElementById('hint').textContent = 'Scans to ' + Camera.pageUrl('./');
-        const name = (event.id || 'camera') + '-qr';
-        const save = (href, ext) => { const a = document.createElement('a'); a.href = href; a.download = name + ext; a.click(); };
-        const png = document.getElementById('dl-png');
-        const vec = document.getElementById('dl-svg');
-        png.hidden = vec.hidden = false;
-        // 40px per module: crisp at any print size you'd reasonably want.
-        png.onclick = () => save(qr.createDataURL(40, 160), '.png');
-        vec.onclick = () => {
-          const tag = qr.createSvgTag({ cellSize: 10, margin: 4 });
-          const file = tag.includes('xmlns=') ? tag : tag.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
-          save('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(file), '.svg');
-        };
-      } else {
-        document.getElementById('card').hidden = false;
-      }
-    } catch (err) {
-      const el = document.getElementById('error');
-      el.textContent = err.code === 'network' ? "Can't connect. Refresh to try again." : 'Event not found. Check the ?e= part of the link.';
-      el.hidden = false;
-    }
-  })();
-</script>
+  <p>Opening <a href="https://lk-productions.github.io/moments/">LK Moments</a>…</p>
 </body>
 </html>
